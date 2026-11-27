@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launcher</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-gear" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="12" fill="currentColor" fill-rule="evenodd"></path></svg>
+      <span id="brand-name">Chargement…</span>
+    </div>
+    <nav class="tabs" aria-label="Navigation">
+      <button class="tab active" data-view="home">Accueil</button>
+      <button class="tab" data-view="settings">Réglages</button>
+    </nav>
+    <button id="account" class="account">
+      <span id="account-avatar" class="avatar">?</span>
+      <span id="account-name">Se connecter</span>
+    </button>
+  </header>
+
+  <main id="view-home" class="view">
+    <section class="hero" id="hero">
+      <svg class="gear g1" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="24" fill-rule="evenodd"></path></svg>
+      <svg class="gear g2" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="16" fill-rule="evenodd"></path></svg>
+      <svg class="gear g3" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="12" fill-rule="evenodd"></path></svg>
+      <div class="hero-fade"></div>
+      <div class="hero-text">
+        <span class="kicker" id="server-line"><span class="dot" id="server-dot"></span><span id="server-text">Recherche du serveur…</span></span>
+        <h1 id="hero-name">…</h1>
+        <p class="lead">Le modpack officiel du serveur, synchronisé automatiquement à chaque mise à jour.</p>
+        <div class="chips">
+          <span class="chip" id="chip-mc">MINECRAFT</span>
+          <span class="chip" id="chip-pack">MODPACK</span>
+          <span class="chip" id="chip-ping">PING —</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="dock">
+      <div class="panel status">
+        <div class="status-head">
+          <span id="status-title">Vérification…</span>
+          <span id="status-pct" class="mono accent"></span>
+        </div>
+        <div class="belt"><div id="belt-fill" class="belt-fill"></div></div>
+        <span id="status-sub" class="mono muted"></span>
+      </div>
+      <div class="panel news">
+        <span class="mono muted label" id="news-title">NOUVEAUTÉS</span>
+        <ul id="news-list"></ul>
+      </div>
+      <button id="play" class="play" disabled>
+        <span class="play-text">
+          <span id="play-label">Jouer</span>
+          <span id="play-sub">chargement…</span>
+        </span>
+        <svg class="play-gear" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="12" fill="currentColor" fill-rule="evenodd"></path></svg>
+      </button>
+    </section>
+  </main>
+
+  <main id="view-settings" class="view hidden">
+    <section class="panel settings">
+      <h2>Réglages</h2>
+      <label class="row">
+        <span>
+          <strong>Mémoire allouée</strong>
+          <small class="muted">Recommandé : 6 Go pour un modpack. Ne dépasse pas la moitié de la RAM de ton PC.</small>
+        </span>
+        <span class="ram">
+          <input id="ram" type="range" min="2048" max="16384" step="512">
+          <output id="ram-out" class="mono accent">6 Go</output>
+        </span>
+      </label>
+      <label class="row">
+        <span>
+          <strong>Réduire le launcher pendant le jeu</strong>
+          <small class="muted">Il réapparaît quand tu quittes Minecraft.</small>
+        </span>
+        <input id="minimize" type="checkbox" class="switch">
+      </label>
+      <div class="row">
+        <span><strong>Dossiers</strong><small class="muted">Captures d'écran, mods, journaux…</small></span>
+        <span class="btns">
+          <button class="ghost" data-folder="jeu">Dossier du jeu</button>
+          <button class="ghost" data-folder="logs">Journaux</button>
+        </span>
+      </div>
+      <div class="row">
+        <span><strong>Compte</strong><small class="muted" id="settings-account">Non connecté</small></span>
+        <button class="ghost danger" id="logout">Se déconnecter</button>
+      </div>
+      <p class="mono muted version" id="app-version"></p>
+    </section>
+  </main>
+
+  <span class="sign">N4ssD</span>
+</div>
+
+<div id="login" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="login-title">
+  <div class="modal-card">
+    <h2 id="login-title">Connexion Microsoft</h2>
+    <p class="muted" id="login-help">Préparation…</p>
+    <div class="code mono" id="login-code">· · · · · · · ·</div>
+    <div class="btns">
+      <button class="primary" id="login-open" disabled>Ouvrir la page Microsoft</button>
+      <button class="ghost" id="login-copy" disabled>Copier le code</button>
+    </div>
+    <p class="error hidden" id="login-error"></p>
+    <button class="link" id="login-close">Annuler</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden" role="alert"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

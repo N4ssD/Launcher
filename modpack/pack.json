@@ -1,0 +1,10 @@
+{
+  "name": "TonServeur",
+  "address": "",
+  "minecraft": "1.21.1",
+  "neoforge": "latest",
+  "version": "1.0",
+  "news": [
+    { "type": "info", "text": "Bienvenue sur le launcher du serveur !" }
+  ]
+}

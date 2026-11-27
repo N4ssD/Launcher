@@ -1,0 +1,38 @@
+name: Mise à jour du modpack
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modpack/**"
+      - "!modpack/manifest.json"
+      - "scripts/gen_manifest.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: manifest
+  cancel-in-progress: false
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Générer la liste des fichiers
+        run: python3 scripts/gen_manifest.py
+
+      - name: Enregistrer manifest.json
+        run: |
+          if git diff --quiet -- modpack/manifest.json; then
+            echo "Aucun changement."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modpack/manifest.json
+          git commit -m "Modpack : manifeste mis à jour"
+          git push

@@ -1,0 +1,67 @@
+name: Compiler le launcher (.exe)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Compiler
+        working-directory: app
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          PACK_BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/main/modpack/
+        run: npx --yes @tauri-apps/cli@2 build
+
+      - name: Préparer l'installeur
+        id: setup
+        shell: pwsh
+        run: |
+          $conf = Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $name = ($conf.productName -replace '[^A-Za-z0-9_-]', '')
+          $exe = Get-ChildItem app/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item $exe.FullName "dist/${name}Setup.exe"
+          "version=$($conf.version)" >> $env:GITHUB_OUTPUT
+          "file=dist/${name}Setup.exe" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installeur-windows
+          path: ${{ steps.setup.outputs.file }}
+
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.setup.outputs.version }}
+          name: Launcher v${{ steps.setup.outputs.version }}
+          body: |
+            Télécharge le fichier **Setup.exe** ci-dessous, lance-le, puis ouvre le launcher.
+            Au premier lancement, il télécharge Java, Minecraft, NeoForge et les mods du serveur.
+          files: ${{ steps.setup.outputs.file }}
+          make_latest: true
