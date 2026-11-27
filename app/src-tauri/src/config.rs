@@ -90,6 +90,9 @@ pub struct Pack {
     pub version: String,
     #[serde(default)]
     pub news: Vec<News>,
+    /// Historique des mises à jour (onglet Nouveautés)
+    #[serde(default)]
+    pub changelog: Vec<Release>,
     /// RAM conseillée pour le modpack, en Mo (facultatif)
     #[serde(default)]
     pub ram: Option<u32>,
@@ -111,6 +114,18 @@ pub mod memory {
         let want = pack.map(|v| v as u64).unwrap_or(6144);
         want.min(safe_max_mb(total)).max(2048) / 512 * 512
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Release {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub date: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub items: Vec<News>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

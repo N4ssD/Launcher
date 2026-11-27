@@ -10,5 +10,26 @@
       "text": "Bienvenue sur le launcher du serveur !"
     }
   ],
-  "ram": 6144
+  "ram": 6144,
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2026-11-27",
+      "title": "Ouverture du launcher",
+      "items": [
+        {
+          "type": "info",
+          "text": "Bienvenue sur le launcher officiel du serveur !"
+        },
+        {
+          "type": "add",
+          "text": "Mise à jour automatique des mods à chaque lancement"
+        },
+        {
+          "type": "add",
+          "text": "Connexion directe au serveur"
+        }
+      ]
+    }
+  ]
 }

@@ -240,7 +240,9 @@ async function loadPack() {
     $("news-title").textContent = p.version ? `NOUVEAUTÉS v${p.version}` : "NOUVEAUTÉS";
     const ul = $("news-list");
     ul.innerHTML = "";
-    const items = (p.news || []).slice(0, 3);
+    renderChangelog(p);
+    const latest = (p.changelog && p.changelog[0]) || null;
+    const items = ((p.news && p.news.length ? p.news : latest ? latest.items : []) || []).slice(0, 3);
     if (!items.length) items.push({ type: "info", text: "Rien de nouveau pour l'instant" });
     items.forEach((n, i) => {
       const li = document.createElement("li");
@@ -429,6 +431,73 @@ listen("login", async ({ payload }) => {
 });
 
 /* =====================================================================
+   Onglet Nouveautés : frise des mises à jour
+   ===================================================================== */
+function fmtDate(d) {
+  if (!d) return "";
+  const t = new Date(d + "T12:00:00");
+  return isNaN(t) ? d : t.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+function lsGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
+
+function renderChangelog(p) {
+  let releases = (p.changelog || []).filter((r) => r && (r.items || []).length);
+  if (!releases.length && (p.news || []).length) releases = [{ version: p.version, date: "", title: "Dernière mise à jour", items: p.news }];
+  const tl = $("timeline");
+  tl.innerHTML = "";
+  $("cl-count").textContent = releases.length ? `${releases.length} mise${releases.length > 1 ? "s" : ""} à jour` : "";
+  if (!releases.length) {
+    const li = document.createElement("li");
+    li.className = "cl-empty";
+    li.textContent = "Aucune nouveauté pour l'instant.";
+    tl.appendChild(li);
+  }
+  releases.forEach((r, i) => {
+    const li = document.createElement("li");
+    li.className = "release" + (i === 0 ? " latest" : "");
+    li.style.animationDelay = 80 + i * 70 + "ms";
+    const side = document.createElement("div");
+    side.className = "rel-side";
+    const ver = document.createElement("span");
+    ver.className = "rel-ver";
+    ver.textContent = r.version ? "v" + r.version : "—";
+    const date = document.createElement("span");
+    date.className = "rel-date";
+    date.textContent = fmtDate(r.date);
+    side.append(ver, date);
+    const node = document.createElementNS(SVGNS, "svg");
+    node.setAttribute("class", "rel-node");
+    node.setAttribute("viewBox", "-50 -50 100 100");
+    buildGear(el("g", {}, node), 10, 7.4, i === 0 ? "brass" : "andesite");
+    const card = document.createElement("div");
+    card.className = "rel-card";
+    const h = document.createElement("h3");
+    h.className = "rel-title";
+    h.textContent = r.title || "Mise à jour";
+    if (i === 0) { const n = document.createElement("span"); n.className = "rel-new"; n.textContent = "NOUVEAU"; h.appendChild(n); }
+    const ul = document.createElement("ul");
+    ul.className = "rel-items";
+    for (const it of r.items || []) {
+      const row = document.createElement("li");
+      const kind = NEWS_ICON[it.type] ? it.type : "info";
+      const b = document.createElement("b");
+      b.className = "k-" + kind;
+      b.textContent = NEWS_ICON[kind];
+      row.append(b, document.createTextNode(it.text));
+      ul.appendChild(row);
+    }
+    card.append(h, ul);
+    li.append(side, node, card);
+    tl.appendChild(li);
+  });
+  const key = releases.length ? releases[0].version || releases[0].title : "";
+  state.latestNews = key;
+  $("news-dot").classList.toggle("hidden", !key || lsGet("nouveautes-vues") === key);
+}
+$("news-all").addEventListener("click", () => showView("news"));
+
+/* =====================================================================
    Onglets & réglages
    ===================================================================== */
 function moveIndicator() {
@@ -441,7 +510,8 @@ function moveIndicator() {
 function showView(v) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === v));
   moveIndicator();
-  for (const name of ["home", "settings"]) {
+  if (v === "news" && state.latestNews) { lsSet("nouveautes-vues", state.latestNews); $("news-dot").classList.add("hidden"); }
+  for (const name of ["home", "news", "settings"]) {
     const view = $("view-" + name);
     const show = name === v;
     if (show && view.classList.contains("hidden")) {

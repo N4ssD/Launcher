@@ -26,6 +26,7 @@
     <nav class="tabs" aria-label="Navigation">
       <span class="tab-ind" id="tab-ind"></span>
       <button class="tab active" data-view="home">Accueil</button>
+      <button class="tab" data-view="news">Nouveautés<span class="tab-dot hidden" id="news-dot"></span></button>
       <button class="tab" data-view="settings">Réglages</button>
     </nav>
     <div class="top-right">
@@ -80,7 +81,10 @@
         <span id="status-sub" class="mono muted"></span>
       </div>
       <div class="panel news rise" style="--d:240ms">
-        <span class="mono muted label" id="news-title">NOUVEAUTÉS</span>
+        <div class="news-head">
+          <span class="mono muted label" id="news-title">NOUVEAUTÉS</span>
+          <button class="see-all" id="news-all">Tout voir →</button>
+        </div>
         <ul id="news-list"></ul>
       </div>
       <button id="play" class="play rise" style="--d:300ms" disabled>
@@ -91,6 +95,20 @@
         </span>
         <svg class="play-gear" viewBox="-50 -50 100 100" aria-hidden="true"><g id="play-gear"></g></svg>
       </button>
+    </section>
+  </main>
+
+  <!-- Nouveautés -->
+  <main id="view-news" class="view hidden">
+    <section class="panel changelog">
+      <div class="settings-head">
+        <div>
+          <h2>Nouveautés</h2>
+          <p class="muted cl-sub">Toutes les mises à jour du modpack et du serveur.</p>
+        </div>
+        <span class="mono muted" id="cl-count"></span>
+      </div>
+      <ol class="timeline" id="timeline"></ol>
     </section>
   </main>
 

@@ -47,6 +47,28 @@ Ne mets dans `modpack/mods/` que les mods utiles côté client (pas les mods uni
 
 Une modification de ce fichier est visible dans le launcher sans recompiler l'exe.
 
+### Onglet « Nouveautés »
+
+L'historique complet affiché dans l'onglet Nouveautés vient du champ `changelog` de `pack.json`. Mets la plus récente **en premier** :
+
+```json
+"changelog": [
+  {
+    "version": "1.1",
+    "date": "2026-12-02",
+    "title": "La mise à jour des trains",
+    "items": [
+      { "type": "add", "text": "Nouveau mod : Steam 'n' Rails" },
+      { "type": "update", "text": "Create mis à jour" },
+      { "type": "remove", "text": "Ancienne minimap retirée" },
+      { "type": "info", "text": "Redémarrage du serveur chaque nuit à 5 h" }
+    ]
+  }
+]
+```
+
+La dernière version porte le badge « NOUVEAU », et un point orange apparaît sur l'onglet tant que le joueur ne l'a pas ouvert. Si `news` est vide, l'accueil affiche les 3 premières lignes de la dernière version.
+
 ## Connexion Microsoft : à faire une seule fois
 
 Comme tous les launchers non officiels, celui-ci a besoin de sa propre « application » Microsoft, et Mojang doit l'autoriser.
