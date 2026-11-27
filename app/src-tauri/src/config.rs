@@ -61,6 +61,11 @@ pub struct Settings {
     /// Volume des sons d'interface (0 à 100)
     #[serde(default = "default_volume")]
     pub sound_volume: u32,
+    /// Musique d'ambiance
+    #[serde(default = "default_true")]
+    pub music_on: bool,
+    #[serde(default = "default_music")]
+    pub music_volume: u32,
     /// Arguments Java optimisés (G1GC)
     #[serde(default = "default_true")]
     pub optimized_java: bool,
@@ -71,6 +76,9 @@ pub struct Settings {
 
 fn default_volume() -> u32 {
     60
+}
+fn default_music() -> u32 {
+    35
 }
 fn default_lang() -> String {
     "fr".into()
@@ -96,6 +104,8 @@ impl Default for Settings {
             height: 0,
             discord_rpc: true,
             sound_volume: default_volume(),
+            music_on: true,
+            music_volume: default_music(),
             optimized_java: true,
             lang: default_lang(),
         }

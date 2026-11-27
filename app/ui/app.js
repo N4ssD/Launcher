@@ -388,10 +388,12 @@ listen("launched", () => {
   setBelt(1, false);
   sparks();
   sfx.chime();
+  sfx.music(false);
 });
 
 listen("game-exit", ({ payload }) => {
   backToIdle();
+  if ($("music-on").checked) setTimeout(() => sfx.music(true), 1500);
   if (payload !== null && payload !== 0) showCrash(payload);
 });
 
@@ -916,6 +918,8 @@ function saveSettings() {
     discord_rpc: $("discord-rpc").checked,
     optional: state.info.settings.optional || {},
     sound_volume: +$("volume").value,
+    music_on: $("music-on").checked,
+    music_volume: +$("music-volume").value,
     optimized_java: $("opt-java").checked,
     lang: $("lang").value,
   });
@@ -935,6 +939,17 @@ function renderVolume() {
   sfx.setVolume(v / 100);
 }
 $("volume").addEventListener("input", renderVolume);
+function renderMusic() {
+  const v = +$("music-volume").value;
+  $("music-volume").style.setProperty("--p", v + "%");
+  $("music-volume").style.setProperty("--s", "100%");
+  $("music-out").textContent = v + " %";
+  $("music-volume").disabled = !$("music-on").checked;
+  sfx.setMusicVolume(v / 100);
+}
+$("music-volume").addEventListener("input", renderMusic);
+$("music-volume").addEventListener("change", saveSettings);
+$("music-on").addEventListener("change", () => { renderMusic(); sfx.music($("music-on").checked && state.phase !== "ingame"); saveSettings(); });
 $("volume").addEventListener("change", () => { saveSettings(); sfx.chime(); });
 $("lang").addEventListener("change", () => { saveSettings(); setTimeout(() => location.reload(), 250); });
 $("repair").addEventListener("click", async () => {
@@ -1025,6 +1040,66 @@ $("upd-check").addEventListener("click", async () => {
 });
 
 /* =====================================================================
+   Animations d'ambiance : poussières dorées + parallaxe
+   ===================================================================== */
+const motes = (() => {
+  const cv = $("motes"), cx = cv.getContext("2d");
+  let W = 0, H = 0, dpr = 1, parts = [], last = 0;
+  const sprite = document.createElement("canvas");
+  sprite.width = sprite.height = 32;
+  const sg = sprite.getContext("2d"), grad = sg.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, "rgba(255,226,160,1)"); grad.addColorStop(0.35, "rgba(255,196,110,.55)"); grad.addColorStop(1, "rgba(255,170,80,0)");
+  sg.fillStyle = grad; sg.fillRect(0, 0, 32, 32);
+  function resize() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = innerWidth; H = innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function spawn(fresh) {
+    return { x: Math.random() * W, y: fresh ? Math.random() * H : H + 10, r: 2 + Math.random() * 5, vy: 8 + Math.random() * 18,
+      sway: 6 + Math.random() * 18, f: 0.2 + Math.random() * 0.5, ph: Math.random() * 6.28, tw: 0.6 + Math.random() * 1.6, a: 0.25 + Math.random() * 0.55 };
+  }
+  function frame(t) {
+    requestAnimationFrame(frame);
+    if (document.hidden || reduceMotion) { last = t; return; }
+    const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
+    last = t;
+    const boost = 1 + Math.min(3, kin.speed / 16);
+    cx.clearRect(0, 0, W, H);
+    for (const p of parts) {
+      p.y -= p.vy * dt * boost;
+      const x = p.x + Math.sin(t / 1000 * p.f + p.ph) * p.sway;
+      if (p.y < -20) Object.assign(p, spawn(false));
+      const alpha = p.a * (0.55 + 0.45 * Math.sin(t / 1000 * p.tw + p.ph)) * Math.min(1, (H - p.y) / 120);
+      cx.globalAlpha = Math.max(0, alpha);
+      cx.drawImage(sprite, x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+    }
+  }
+  return {
+    start() {
+      resize();
+      parts = Array.from({ length: Math.round(Math.min(70, (W * H) / 16000)) }, () => spawn(true));
+      addEventListener("resize", resize);
+      requestAnimationFrame(frame);
+    },
+  };
+})();
+
+let parallaxRaf = 0;
+document.addEventListener("mousemove", (e) => {
+  if (reduceMotion || parallaxRaf) return;
+  parallaxRaf = requestAnimationFrame(() => {
+    parallaxRaf = 0;
+    const x = e.clientX / innerWidth - 0.5, y = e.clientY / innerHeight - 0.5;
+    document.documentElement.style.setProperty("--px", (-x * 18).toFixed(1) + "px");
+    document.documentElement.style.setProperty("--py", (-y * 12).toFixed(1) + "px");
+  });
+});
+// Fenêtre réduite ou cachée : on met les animations en pause (économie de batterie)
+document.addEventListener("visibilitychange", () => document.body.classList.toggle("paused", document.hidden));
+
+/* =====================================================================
    Sons : clics sur les boutons et interrupteurs
    ===================================================================== */
 document.addEventListener("click", (e) => {
@@ -1047,6 +1122,12 @@ document.addEventListener("click", (e) => {
   $("lang").value = s.lang === "en" ? "en" : "fr";
   $("volume").value = s.sound_volume ?? 60;
   renderVolume();
+  $("music-on").checked = s.music_on !== false;
+  $("music-volume").value = s.music_volume ?? 35;
+  renderMusic();
+  motes.start();
+  setTimeout(() => sfx.startup(), 350);
+  if ($("music-on").checked) setTimeout(() => sfx.music(true), 1800);
   $("opt-java").checked = s.optimized_java !== false;
   $("ram-auto").checked = s.ram_mb === 0;
   $("ram").max = ramLimits().max;

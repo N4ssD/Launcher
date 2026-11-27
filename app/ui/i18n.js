@@ -52,6 +52,9 @@ const i18n = (() => {
     "Réparer": "Repair", "Dossiers": "Folders", "Captures d'écran, mods, journaux…": "Screenshots, mods, logs…", "Dossier du jeu": "Game folder", "Journaux": "Logs",
     "Mise à jour du launcher": "Launcher updates", "Rechercher": "Check", "Installer": "Install", "Compte": "Account", "Non connecté": "Not signed in",
     "Réglages enregistrés": "Settings saved",
+    "Effets sonores": "Sound effects", "Petits sons de bois et de harpe quand tu cliques ou lances le jeu.": "Little wood and harp sounds when you click or launch the game.",
+    "Musique d'ambiance": "Ambient music", "Musique douce et médiévale dans le launcher, coupée pendant que tu joues.": "Soft medieval music in the launcher, muted while you play.",
+    "Volume de la musique": "Music volume",
     // Connexion
     "Connexion Microsoft": "Microsoft sign-in", "Ouvrir la page Microsoft": "Open the Microsoft page", "Copier le code": "Copy code", "Copié !": "Copied!",
     "En attente de validation…": "Waiting for confirmation…", "Annuler": "Cancel",

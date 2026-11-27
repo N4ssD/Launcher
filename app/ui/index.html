@@ -16,6 +16,8 @@
         </defs>
 </svg>
 <div class="bgimg" aria-hidden="true"></div>
+<div class="rays" aria-hidden="true"></div>
+<canvas id="motes" class="motes" aria-hidden="true"></canvas>
 <div class="app">
   <!-- Barre de titre (déplaçable) -->
   <header class="top rise" style="--d:0ms" data-tauri-drag-region>
@@ -79,6 +81,7 @@
         <span class="g-title">Statistiques cinétiques</span>
         <span class="g-line">Vitesse : <b id="rpm">0</b> tr/min <i id="rpm-label">(Lente)</i></span>
       </div>
+      <div class="steam" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
       <div class="hero-fade"></div>
       <div class="hero-text">
         <span class="kicker rise" style="--d:260ms"><span class="dot" id="server-dot"></span><span id="server-text">Recherche du serveur…</span></span>
@@ -235,11 +238,20 @@
       </div>
 
       <div class="card row">
-        <span class="card-text"><strong>Sons</strong><small class="muted">Petits bruits mécaniques façon Create quand tu cliques ou lances le jeu.</small></span>
+        <span class="card-text"><strong>Effets sonores</strong><small class="muted">Petits sons de bois et de harpe quand tu cliques ou lances le jeu.</small></span>
         <span class="vol">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
           <input id="volume" type="range" min="0" max="100" step="5" aria-label="Volume des sons">
           <output id="volume-out" class="mono accent">60 %</output>
+        </span>
+      </div>
+
+      <div class="card row">
+        <span class="card-text"><strong>Musique d'ambiance</strong><small class="muted">Musique douce et médiévale dans le launcher, coupée pendant que tu joues.</small></span>
+        <span class="vol">
+          <input id="music-on" type="checkbox" class="switch" aria-label="Musique d'ambiance">
+          <input id="music-volume" type="range" min="0" max="100" step="5" aria-label="Volume de la musique">
+          <output id="music-out" class="mono accent">35 %</output>
         </span>
       </div>
 

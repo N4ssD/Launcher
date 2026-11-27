@@ -159,7 +159,8 @@ Dans `%APPDATA%\N4ssD-Launcher` :
 - **Plusieurs comptes** : clic sur le pseudo en haut à droite pour changer de compte, en ajouter un ou se déconnecter.
 - **Réparer l'installation** (Réglages) : revérifie chaque fichier (Java, Minecraft, NeoForge, mods) et retélécharge ceux qui sont abîmés. C'est le premier réflexe quand le jeu ne se lance plus.
 - **Java optimisé** (activé par défaut) : ajoute des réglages du ramasse-miettes G1 éprouvés (inspirés des « flags d'Aikar ») pour limiter les saccades.
-- **Sons** : petits bruits mécaniques façon Create, avec le volume réglable (0 % pour les couper).
+- **Effets sonores** : petits sons de bois et de harpe (clics, lancement, ouverture du launcher), volume réglable (0 % pour les couper).
+- **Musique d'ambiance** : musique douce et médiévale générée en direct (bourdon, accords lents, harpe, cloches, vent), jamais deux fois la même. Volume séparé, coupée automatiquement pendant le jeu.
 - **Langue** : français ou anglais. Le contenu de `pack.json` (nouveautés, événement…) reste tel que tu l'écris.
 
 ## Mémoire (RAM)
