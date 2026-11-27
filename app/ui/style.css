@@ -399,3 +399,49 @@ input[type=range]:disabled { opacity: .55; cursor: default; }
 .crash-card { width: 640px; max-width: 92vw; }
 .crash-card h2 { color: #FF8A7A; }
 .crash-log { width: 100%; height: 220px; overflow: auto; margin: 0; padding: 12px 14px; text-align: left; font-size: 11.5px; line-height: 1.5; color: #D8D2C6; background: rgba(16,0,16,.85); border: 2px solid; border-image: linear-gradient(180deg, #A0302A, #5A1414) 1; white-space: pre-wrap; word-break: break-word; user-select: text; }
+
+/* ---------- Menu des comptes ---------- */
+.acc-wrap { position: relative; }
+.account .caret { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); transition: transform .25s var(--ease); }
+.account.open .caret { transform: rotate(180deg); }
+.acc-menu { position: absolute; right: 0; top: calc(100% + 8px); width: 250px; padding: 8px; border-radius: 15px; z-index: 30;
+  background: linear-gradient(180deg, rgba(48,45,41,.97), rgba(36,34,31,.97)); backdrop-filter: blur(14px); border: 1px solid var(--line-2);
+  box-shadow: 0 20px 50px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 2px; animation: menuIn .25s var(--ease); transform-origin: top right; }
+@keyframes menuIn { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+.acc-label { font-size: 10.5px; letter-spacing: 1.2px; padding: 6px 10px 4px; }
+.acc-list { display: flex; flex-direction: column; gap: 2px; }
+.acc-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; font-size: 14px; font-weight: 600; transition: background .15s; }
+.acc-item:hover { background: rgba(255,255,255,.06); }
+.acc-item .avatar { width: 28px; height: 28px; font-size: 12px; }
+.acc-item .acc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-item .acc-check { color: var(--green); font-size: 13px; }
+.acc-item .acc-del { opacity: 0; border: 0; background: none; color: var(--muted); font-size: 15px; padding: 0 4px; border-radius: 6px; transition: opacity .15s, color .15s; }
+.acc-item:hover .acc-del { opacity: 1; }
+.acc-item .acc-del:hover { color: var(--red); }
+.acc-plus { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--panel-2); color: var(--brass); font-weight: 800; }
+.acc-add { border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; margin-top: 4px; padding-top: 10px; }
+.acc-out .acc-plus { color: var(--muted); font-size: 13px; }
+.acc-out:hover { color: var(--red); }
+
+/* ---------- Bannière d'événement ---------- */
+.event { position: absolute; top: 26px; left: 46px; z-index: 3; max-width: 420px; display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px 12px 12px;
+  border-radius: 15px; background: linear-gradient(180deg, rgba(48,45,41,.88), rgba(36,34,31,.88)); backdrop-filter: blur(10px);
+  border: 1px solid rgba(233,180,76,.45); box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 0 0 4px rgba(233,180,76,.06); opacity: 0; animation: rise .6s var(--ease) .7s forwards; }
+.event-icon { width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #2A1E0C;
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass)); box-shadow: inset 0 -2px 0 var(--brass-lo); }
+.event-icon svg { width: 20px; height: 20px; }
+.event-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.event-top { display: flex; align-items: center; gap: 10px; }
+.event-label { font-size: 10.5px; letter-spacing: 1.2px; color: var(--brass); }
+.event-when { font-size: 11px; padding: 2px 7px; border-radius: 6px; background: rgba(233,180,76,.12); color: var(--brass-hi); }
+.event-when.live { background: rgba(224,106,90,.18); color: #FF8A7A; animation: blink 1.4s ease-in-out infinite; }
+.event-text strong { font-size: 15px; }
+.event-text .muted { font-size: 13px; line-height: 1.4; }
+.event:not(.hidden) ~ .goggles { }
+
+/* ---------- Réglages : son ---------- */
+.vol { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+.vol svg { width: 20px; height: 20px; }
+.vol input { width: 200px; }
+.vol output { width: 48px; text-align: right; }
+.top { position: relative; z-index: 20; }

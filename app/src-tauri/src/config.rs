@@ -58,6 +58,22 @@ pub struct Settings {
     pub height: u32,
     #[serde(default = "default_true")]
     pub discord_rpc: bool,
+    /// Volume des sons d'interface (0 à 100)
+    #[serde(default = "default_volume")]
+    pub sound_volume: u32,
+    /// Arguments Java optimisés (G1GC)
+    #[serde(default = "default_true")]
+    pub optimized_java: bool,
+    /// Langue de l'interface : fr ou en
+    #[serde(default = "default_lang")]
+    pub lang: String,
+}
+
+fn default_volume() -> u32 {
+    60
+}
+fn default_lang() -> String {
+    "fr".into()
 }
 
 /// 0 = automatique (valeur conseillée selon le PC et le modpack)
@@ -79,6 +95,9 @@ impl Default for Settings {
             width: 0,
             height: 0,
             discord_rpc: true,
+            sound_volume: default_volume(),
+            optimized_java: true,
+            lang: default_lang(),
         }
     }
 }
@@ -123,6 +142,9 @@ pub struct Pack {
     /// Identifiant de l'application Discord (statut « Joue sur … »)
     #[serde(default)]
     pub discord_app_id: String,
+    /// Événement affiché sur l'accueil (facultatif)
+    #[serde(default)]
+    pub event: Option<Event>,
     /// RAM conseillée pour le modpack, en Mo (facultatif)
     #[serde(default)]
     pub ram: Option<u32>,
@@ -144,6 +166,20 @@ pub mod memory {
         let want = pack.map(|v| v as u64).unwrap_or(6144);
         want.min(safe_max_mb(total)).max(2048) / 512 * 512
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Event {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub text: String,
+    /// Début, ex. « 2026-12-05T21:00:00+01:00 »
+    #[serde(default)]
+    pub date: String,
+    /// Fin (facultatif)
+    #[serde(default)]
+    pub end: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

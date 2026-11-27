@@ -109,7 +109,29 @@ pub struct LaunchOptions<'a> {
     pub fullscreen: bool,
     pub width: u32,
     pub height: u32,
+    pub optimized_java: bool,
 }
+
+/// Réglages du ramasse-miettes G1 (inspirés des « flags d'Aikar »), adaptés au client.
+const OPTIMIZED_JVM: &[&str] = &[
+    "-XX:+UseG1GC",
+    "-XX:+ParallelRefProcEnabled",
+    "-XX:MaxGCPauseMillis=200",
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:+DisableExplicitGC",
+    "-XX:G1NewSizePercent=30",
+    "-XX:G1MaxNewSizePercent=40",
+    "-XX:G1HeapRegionSize=8M",
+    "-XX:G1ReservePercent=20",
+    "-XX:G1HeapWastePercent=5",
+    "-XX:G1MixedGCCountTarget=4",
+    "-XX:InitiatingHeapOccupancyPercent=15",
+    "-XX:G1MixedGCLiveThresholdPercent=90",
+    "-XX:G1RSetUpdatingPauseTimePercent=5",
+    "-XX:SurvivorRatio=32",
+    "-XX:+PerfDisableSharedMem",
+    "-XX:MaxTenuringThreshold=1",
+];
 
 pub fn launch(o: LaunchOptions) -> Result<Child> {
     let v = merged_version(o.mc_dir, o.version_id)?;
@@ -179,6 +201,9 @@ pub fn launch(o: LaunchOptions) -> Result<Child> {
         format!("-Xmx{}M", o.ram_mb),
         format!("-Xms{}M", (o.ram_mb / 4).max(512)),
     ];
+    if o.optimized_java {
+        args.extend(OPTIMIZED_JVM.iter().map(|s| s.to_string()));
+    }
     if let Some(log) = v["logging"]["client"].as_object() {
         if let (Some(arg), Some(id)) = (log.get("argument").and_then(|a| a.as_str()), log["file"]["id"].as_str()) {
             let path = o.mc_dir.join("assets").join("log_configs").join(id);

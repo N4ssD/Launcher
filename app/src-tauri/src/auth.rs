@@ -44,22 +44,93 @@ fn check_client_id() -> Result<()> {
     Ok(())
 }
 
-fn path() -> std::path::PathBuf {
-    data_dir().join("compte.json")
+#[derive(Serialize, Deserialize, Default)]
+struct Store {
+    #[serde(default)]
+    active: String,
+    #[serde(default)]
+    accounts: Vec<Account>,
 }
 
-pub fn load() -> Option<Account> {
-    std::fs::read_to_string(path()).ok().and_then(|s| serde_json::from_str(&s).ok())
+fn store_path() -> std::path::PathBuf {
+    data_dir().join("comptes.json")
 }
 
-pub fn save(acc: &Account) -> Result<()> {
+fn load_store() -> Store {
+    if let Some(s) = std::fs::read_to_string(store_path()).ok().and_then(|s| serde_json::from_str(&s).ok()) {
+        return s;
+    }
+    // Ancien format (un seul compte)
+    let old = data_dir().join("compte.json");
+    if let Some(acc) = std::fs::read_to_string(&old).ok().and_then(|s| serde_json::from_str::<Account>(&s).ok()) {
+        let s = Store { active: acc.uuid.clone(), accounts: vec![acc] };
+        if save_store(&s).is_ok() {
+            let _ = std::fs::remove_file(old);
+        }
+        return s;
+    }
+    Store::default()
+}
+
+fn save_store(s: &Store) -> Result<()> {
     std::fs::create_dir_all(data_dir())?;
-    std::fs::write(path(), serde_json::to_string(acc)?)?;
+    std::fs::write(store_path(), serde_json::to_string(s)?)?;
     Ok(())
 }
 
+/// Compte actif
+pub fn load() -> Option<Account> {
+    let s = load_store();
+    s.accounts.iter().find(|a| a.uuid == s.active).or(s.accounts.first()).cloned()
+}
+
+/// Ajoute ou met à jour un compte et le rend actif
+pub fn save(acc: &Account) -> Result<()> {
+    let mut s = load_store();
+    s.accounts.retain(|a| a.uuid != acc.uuid);
+    s.accounts.push(acc.clone());
+    s.active = acc.uuid.clone();
+    save_store(&s)
+}
+
+/// Déconnecte le compte actif (passe au suivant s'il y en a un)
 pub fn clear() {
-    let _ = std::fs::remove_file(path());
+    let mut s = load_store();
+    let active = load().map(|a| a.uuid).unwrap_or_default();
+    s.accounts.retain(|a| a.uuid != active);
+    s.active = s.accounts.first().map(|a| a.uuid.clone()).unwrap_or_default();
+    let _ = save_store(&s);
+}
+
+#[derive(Serialize)]
+pub struct AccountSummary {
+    pub name: String,
+    pub uuid: String,
+    pub active: bool,
+}
+
+pub fn list() -> Vec<AccountSummary> {
+    let s = load_store();
+    let active = load().map(|a| a.uuid).unwrap_or_default();
+    s.accounts.iter().map(|a| AccountSummary { name: a.name.clone(), uuid: a.uuid.clone(), active: a.uuid == active }).collect()
+}
+
+pub fn switch(uuid: &str) -> bool {
+    let mut s = load_store();
+    if s.accounts.iter().any(|a| a.uuid == uuid) {
+        s.active = uuid.to_string();
+        return save_store(&s).is_ok();
+    }
+    false
+}
+
+pub fn remove(uuid: &str) {
+    let mut s = load_store();
+    s.accounts.retain(|a| a.uuid != uuid);
+    if s.active == uuid {
+        s.active = s.accounts.first().map(|a| a.uuid.clone()).unwrap_or_default();
+    }
+    let _ = save_store(&s);
 }
 
 pub async fn start_device() -> Result<DeviceCode> {

@@ -177,12 +177,15 @@ fn play(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
-async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
-    let settings = Settings::load();
-    emit(app, "compte", "Vérification du compte", -1.0);
-    let acc = auth::load().ok_or_else(|| anyhow!("Connecte-toi d'abord avec ton compte Microsoft."))?;
-    let acc = auth::ensure_valid(acc).await?;
+struct Prepared {
+    pack: Pack,
+    javaw: std::path::PathBuf,
+    version_id: String,
+}
 
+/// Installe/vérifie tout ce qu'il faut (Java, Minecraft, NeoForge, mods).
+/// `strict` = réparation : vérifie chaque fichier (SHA-1) et réinstalle NeoForge.
+async fn prepare(app: &AppHandle, settings: &Settings, strict: bool) -> anyhow::Result<Prepared> {
     emit(app, "pack", "Récupération du modpack", -1.0);
     let pack = fetch_pack().await?;
     let mut manifest = sync::fetch_manifest().await?;
@@ -195,26 +198,43 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
     let mc_dir = config::mc_dir();
     let game_dir = config::game_dir();
 
-    let vjson = install::install_vanilla(&mc_dir, &pack.minecraft, progress(app, "minecraft", "Téléchargement de Minecraft")).await?;
+    let vjson = install::install_vanilla(&mc_dir, &pack.minecraft, progress(app, "minecraft", "Téléchargement de Minecraft"), strict).await?;
     let component = vjson["javaVersion"]["component"].as_str().unwrap_or("java-runtime-delta").to_string();
-    let (java, javaw) = install::install_java(&component, progress(app, "java", "Installation de Java")).await?;
+    let (java, javaw) = install::install_java(&component, progress(app, "java", "Installation de Java"), strict).await?;
 
     emit(app, "neoforge", "Installation de NeoForge", -1.0);
     let neo = install::resolve_neoforge(&pack.neoforge, &pack.minecraft).await?;
+    if strict {
+        let _ = std::fs::remove_dir_all(mc_dir.join("versions").join(format!("neoforge-{neo}")));
+    }
     let id = install::install_neoforge(&mc_dir, &java, &neo).await?;
     let merged = launch::merged_version(&mc_dir, &id)?;
     let jobs = install::library_jobs(&merged, &mc_dir.join("libraries"));
     let p = progress(app, "neoforge", "Bibliothèques NeoForge");
-    net::download_all(jobs, false, 12, move |d, t| p(d, t)).await?;
+    net::download_all(jobs, strict, 12, move |d, t| p(d, t)).await?;
 
+    if strict {
+        let _ = std::fs::remove_file(game_dir.join(".launcher-sync.json"));
+    }
     sync::sync(&game_dir, &manifest, progress(app, "mods", "Mise à jour des mods")).await?;
+    Ok(Prepared { pack, javaw, version_id: id })
+}
+
+async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
+    let settings = Settings::load();
+    emit(app, "compte", "Vérification du compte", -1.0);
+    let acc = auth::load().ok_or_else(|| anyhow!("Connecte-toi d'abord avec ton compte Microsoft."))?;
+    let acc = auth::ensure_valid(acc).await?;
+    let Prepared { pack, javaw, version_id } = prepare(app, &settings, false).await?;
 
     emit(app, "lancement", "Lancement de Minecraft", -1.0);
+    let mc_dir = config::mc_dir();
+    let game_dir = config::game_dir();
     let mut child = launch::launch(launch::LaunchOptions {
         mc_dir: &mc_dir,
         game_dir: &game_dir,
         javaw: &javaw,
-        version_id: &id,
+        version_id: &version_id,
         account: &acc,
         ram_mb: if settings.ram_mb == 0 {
             memory::recommended_mb(memory::total_mb(), pack.ram) as u32
@@ -225,6 +245,7 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
         fullscreen: settings.fullscreen,
         width: settings.width,
         height: settings.height,
+        optimized_java: settings.optimized_java,
     })?;
     if settings.discord_rpc && !pack.discord_app_id.trim().is_empty() {
         let start = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
@@ -255,7 +276,38 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
     Ok(())
 }
 
-// ---------- Mods ----------
+#[tauri::command]
+fn repair(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if state.busy.swap(true, Ordering::SeqCst) {
+        return Err("Une préparation est déjà en cours.".into());
+    }
+    tauri::async_runtime::spawn(async move {
+        let r = prepare(&app, &Settings::load(), true).await;
+        app.state::<AppState>().busy.store(false, Ordering::SeqCst);
+        match r {
+            Ok(_) => { let _ = app.emit("repair-done", ()); }
+            Err(e) => { let _ = app.emit("play-error", err(e)); }
+        }
+    });
+    Ok(())
+}
+
+// ---------- Comptes ----------
+
+#[tauri::command]
+fn list_accounts() -> Vec<auth::AccountSummary> {
+    auth::list()
+}
+
+#[tauri::command]
+fn switch_account(uuid: String) -> bool {
+    auth::switch(&uuid)
+}
+
+#[tauri::command]
+fn remove_account(uuid: String) {
+    auth::remove(&uuid)
+}
 
 #[derive(Serialize)]
 struct ModsInfo {
@@ -441,7 +493,11 @@ pub fn run() {
             list_screenshots,
             open_file,
             crash_info,
-            share_crash
+            share_crash,
+            repair,
+            list_accounts,
+            switch_account,
+            remove_account
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage du launcher");

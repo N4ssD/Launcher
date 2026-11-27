@@ -63,6 +63,19 @@ Une modification de ce fichier est visible dans le launcher sans recompiler l'ex
 - `discord_app_id` : active le statut « Joue sur TonServeur » sur Discord. Crée une application sur https://discord.com/developers/applications, copie son **Application ID**, puis dans **Rich Presence › Art Assets**, ajoute une image nommée `logo`. Le bouton « Rejoindre le serveur » de ce statut utilise le lien Discord ci-dessus.
 - `optional` : les mods que chaque joueur peut activer dans l'onglet **Mods**. Ils sont téléchargés depuis Modrinth (`modrinth` = l'identifiant dans l'adresse de la page, par ex. modrinth.com/mod/**xaeros-minimap**), donc tu n'as pas à les héberger. `dir` : `mods` (par défaut), `shaderpacks` ou `resourcepacks`. `requires` : les autres mods optionnels nécessaires, activés automatiquement avec lui. Si un mod n'existe pas pour ta version de Minecraft, il apparaît comme « Pas disponible ».
 
+### Bannière d'événement
+
+```json
+"event": {
+  "title": "Grand event PvP",
+  "text": "Rendez-vous au spawn, 500 pièces pour le gagnant !",
+  "date": "2026-12-05T21:00:00+01:00",
+  "end": "2026-12-05T23:00:00+01:00"
+}
+```
+
+Le launcher affiche une carte en haut de l'accueil avec un compte à rebours (« dans 2 j 4 h »), puis « EN COURS » pendant l'événement. La carte disparaît après `end` (ou 3 h après `date` si `end` est vide). Pour la retirer, supprime le bloc `event`. Les heures sont au format `AAAA-MM-JJTHH:MM:SS+01:00` (heure de Paris en hiver, `+02:00` en été).
+
 ### Onglet « Mods »
 
 Il liste les mods de `modpack/mods/` avec leur vrai nom, leur version, leur description et leur icône : tout est lu automatiquement dans les `.jar` quand tu les déposes. Après chaque changement, les mods ajoutés portent le badge **NOUVEAU** et les mods modifiés **MIS À JOUR**.
@@ -140,6 +153,14 @@ Dans `%APPDATA%\N4ssD-Launcher` :
 - `minecraft` : version, bibliothèques, ressources ;
 - `java` : le Java de Mojang ;
 - `logs` : journaux (`jeu.log` en cas de crash).
+
+## Autres réglages des joueurs
+
+- **Plusieurs comptes** : clic sur le pseudo en haut à droite pour changer de compte, en ajouter un ou se déconnecter.
+- **Réparer l'installation** (Réglages) : revérifie chaque fichier (Java, Minecraft, NeoForge, mods) et retélécharge ceux qui sont abîmés. C'est le premier réflexe quand le jeu ne se lance plus.
+- **Java optimisé** (activé par défaut) : ajoute des réglages du ramasse-miettes G1 éprouvés (inspirés des « flags d'Aikar ») pour limiter les saccades.
+- **Sons** : petits bruits mécaniques façon Create, avec le volume réglable (0 % pour les couper).
+- **Langue** : français ou anglais. Le contenu de `pack.json` (nouveautés, événement…) reste tel que tu l'écris.
 
 ## Mémoire (RAM)
 

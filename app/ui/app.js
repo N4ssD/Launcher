@@ -161,6 +161,7 @@ function toast(msg, ms = 6000, title = "Oups", type) {
   bar.addEventListener("animationend", close);
   n.querySelector(".ntf-close").addEventListener("click", close);
   box.appendChild(n);
+  if (type === "error") sfx.error(); else if (type === "success") sfx.chime();
   return n;
 }
 
@@ -265,6 +266,8 @@ async function loadPack() {
     const ul = $("news-list");
     ul.innerHTML = "";
     renderChangelog(p);
+    state.event = p.event || null;
+    renderEvent();
     const links = p.links || {};
     $("link-discord").classList.toggle("hidden", !(links.discord || "").startsWith("https://"));
     $("link-site").classList.toggle("hidden", !(links.site || "").startsWith("https://"));
@@ -339,7 +342,9 @@ $("link-site").addEventListener("click", () => state.pack && invoke("open_url", 
    Jouer
    ===================================================================== */
 $("play").addEventListener("click", async () => {
+  sfx.click();
   if (!state.info.account) return openLogin();
+  sfx.ratchet();
   state.phase = "busy";
   renderPlay();
   setStatus("Préparation…", "", "");
@@ -382,6 +387,7 @@ listen("launched", () => {
   setStatus("Minecraft est lancé", "Connexion automatique au serveur", "");
   setBelt(1, false);
   sparks();
+  sfx.chime();
 });
 
 listen("game-exit", ({ payload }) => {
@@ -445,10 +451,48 @@ async function openLogin() {
     $("login-error").classList.remove("hidden");
   }
 }
-$("account").addEventListener("click", () => {
-  if (state.info.account) showView("settings");
-  else openLogin();
-});
+async function toggleAccMenu(force) {
+  const menu = $("acc-menu");
+  const open = force !== undefined ? force : menu.classList.contains("hidden");
+  if (!open) { menu.classList.add("hidden"); $("account").classList.remove("open"); return; }
+  const list = await invoke("list_accounts").catch(() => []);
+  if (!list.length) return openLogin();
+  const box = $("acc-list");
+  box.innerHTML = "";
+  for (const a of list) {
+    const row = document.createElement("div");
+    row.className = "acc-item";
+    row.setAttribute("role", "menuitem");
+    row.tabIndex = 0;
+    const av = document.createElement("span");
+    av.className = "avatar";
+    av.textContent = a.name[0].toUpperCase();
+    const img = new Image(); img.alt = ""; img.onload = () => { av.textContent = ""; av.appendChild(img); };
+    img.src = `https://mc-heads.net/avatar/${a.uuid}/64`;
+    const name = document.createElement("span");
+    name.className = "acc-name";
+    name.textContent = a.name;
+    row.append(av, name);
+    if (a.active) { const c = document.createElement("span"); c.className = "acc-check"; c.textContent = "✓"; row.appendChild(c); }
+    const del = document.createElement("button");
+    del.className = "acc-del"; del.textContent = "×"; del.setAttribute("aria-label", "Retirer " + a.name);
+    del.addEventListener("click", async (e) => { e.stopPropagation(); await invoke("remove_account", { uuid: a.uuid }); await refreshInfo(); toggleAccMenu(true); });
+    row.appendChild(del);
+    row.addEventListener("click", async () => {
+      if (!a.active) { await invoke("switch_account", { uuid: a.uuid }); await refreshInfo(); toast(a.name, 3000, "Compte changé", "success"); }
+      toggleAccMenu(false);
+    });
+    box.appendChild(row);
+  }
+  menu.classList.remove("hidden");
+  $("account").classList.add("open");
+}
+async function refreshInfo() { state.info = await invoke("get_info"); renderAccount(); }
+$("account").addEventListener("click", (e) => { e.stopPropagation(); if (state.phase === "busy") return; state.info.account ? toggleAccMenu() : openLogin(); });
+document.addEventListener("click", (e) => { if (!e.target.closest(".acc-wrap")) toggleAccMenu(false); });
+$("acc-add").addEventListener("click", () => { toggleAccMenu(false); openLogin(); });
+$("acc-logout").addEventListener("click", async () => { toggleAccMenu(false); await invoke("logout"); await refreshInfo(); });
+$("add-account").addEventListener("click", openLogin);
 $("login-open").addEventListener("click", () => invoke("open_url", { url: loginUri }));
 $("login-copy").addEventListener("click", async () => {
   try {
@@ -473,12 +517,38 @@ listen("login", async ({ payload }) => {
 });
 
 /* =====================================================================
+   Bannière d'événement
+   ===================================================================== */
+function renderEvent() {
+  const ev = state.event, box = $("event");
+  if (!ev || !ev.title) return box.classList.add("hidden");
+  const start = ev.date ? new Date(ev.date) : null;
+  const end = ev.end ? new Date(ev.end) : start ? new Date(start.getTime() + 3 * 3600e3) : null;
+  const now = new Date();
+  if (end && now > end) return box.classList.add("hidden");
+  $("event-title").textContent = ev.title;
+  $("event-desc").textContent = ev.text || "";
+  const when = $("event-when");
+  when.classList.remove("live");
+  if (start && now < start) {
+    const m = Math.round((start - now) / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+    when.textContent = "dans " + (d ? `${d} j ${h} h` : h ? `${h} h ${mm} min` : `${Math.max(1, mm)} min`);
+  } else if (start) {
+    when.textContent = "EN COURS";
+    when.classList.add("live");
+  } else when.textContent = "";
+  when.classList.toggle("hidden", !when.textContent);
+  box.classList.remove("hidden");
+}
+setInterval(renderEvent, 30000);
+
+/* =====================================================================
    Onglet Nouveautés : frise des mises à jour
    ===================================================================== */
 function fmtDate(d) {
   if (!d) return "";
   const t = new Date(d + "T12:00:00");
-  return isNaN(t) ? d : t.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  return isNaN(t) ? d : t.toLocaleDateString(i18n.lang === "en" ? "en-GB" : "fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
 function lsGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
@@ -845,6 +915,9 @@ function saveSettings() {
     width: w, height: h,
     discord_rpc: $("discord-rpc").checked,
     optional: state.info.settings.optional || {},
+    sound_volume: +$("volume").value,
+    optimized_java: $("opt-java").checked,
+    lang: $("lang").value,
   });
   state.info.settings = settings;
   $("display-size").disabled = settings.fullscreen;
@@ -853,6 +926,30 @@ function saveSettings() {
 $("display-mode").addEventListener("change", saveSettings);
 $("display-size").addEventListener("change", saveSettings);
 $("discord-rpc").addEventListener("change", saveSettings);
+$("opt-java").addEventListener("change", saveSettings);
+function renderVolume() {
+  const v = +$("volume").value;
+  $("volume").style.setProperty("--p", v + "%");
+  $("volume").style.setProperty("--s", "100%");
+  $("volume-out").textContent = v + " %";
+  sfx.setVolume(v / 100);
+}
+$("volume").addEventListener("input", renderVolume);
+$("volume").addEventListener("change", () => { saveSettings(); sfx.chime(); });
+$("lang").addEventListener("change", () => { saveSettings(); setTimeout(() => location.reload(), 250); });
+$("repair").addEventListener("click", async () => {
+  if (state.phase !== "idle") return;
+  showView("home");
+  state.phase = "busy";
+  renderPlay();
+  setStatus("Préparation…", "", "");
+  setBelt(-1, true);
+  try { await invoke("repair"); } catch (e) { backToIdle(); toast(String(e)); }
+});
+listen("repair-done", () => {
+  backToIdle();
+  toast("Tout a été vérifié : tu peux jouer.", 6000, "Installation réparée", "success");
+});
 $("ram-auto").addEventListener("change", () => { renderRam(); saveSettings(); });
 $("upd-auto").addEventListener("change", saveSettings);
 $("ram").addEventListener("input", renderRam);
@@ -928,6 +1025,16 @@ $("upd-check").addEventListener("click", async () => {
 });
 
 /* =====================================================================
+   Sons : clics sur les boutons et interrupteurs
+   ===================================================================== */
+document.addEventListener("click", (e) => {
+  const sw = e.target.closest(".switch");
+  if (sw) return sfx.toggle(sw.checked);
+  const b = e.target.closest("button, .opt, .acc-item");
+  if (b && b.id !== "play" && !b.disabled) sfx.click();
+}, true);
+
+/* =====================================================================
    Démarrage
    ===================================================================== */
 (async function init() {
@@ -936,6 +1043,11 @@ $("upd-check").addEventListener("click", async () => {
   requestAnimationFrame(moveIndicator);
   state.info = await invoke("get_info");
   const s = state.info.settings;
+  i18n.start(s.lang || "fr");
+  $("lang").value = s.lang === "en" ? "en" : "fr";
+  $("volume").value = s.sound_volume ?? 60;
+  renderVolume();
+  $("opt-java").checked = s.optimized_java !== false;
   $("ram-auto").checked = s.ram_mb === 0;
   $("ram").max = ramLimits().max;
   if (s.ram_mb) $("ram").value = s.ram_mb;

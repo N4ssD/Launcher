@@ -120,7 +120,7 @@ pub fn library_jobs(json: &Value, libs_dir: &Path) -> Vec<Job> {
 // ---------- Java ----------
 
 /// Installe le Java fourni par Mojang (composant demandé par la version) et renvoie (java, javaw).
-pub async fn install_java(component: &str, progress: Progress) -> Result<(PathBuf, PathBuf)> {
+pub async fn install_java(component: &str, progress: Progress, strict: bool) -> Result<(PathBuf, PathBuf)> {
     let all: Value = get_json(JAVA_ALL).await?;
     let entry = all[JAVA_PLATFORM][component]
         .get(0)
@@ -152,7 +152,7 @@ pub async fn install_java(component: &str, progress: Progress) -> Result<(PathBu
         }
     }
     let p = progress.clone();
-    net::download_all(jobs, false, 12, move |d, t| p(d, t)).await?;
+    net::download_all(jobs, strict, 12, move |d, t| p(d, t)).await?;
 
     #[cfg(windows)]
     let (java, javaw) = (root.join("bin").join("java.exe"), root.join("bin").join("javaw.exe"));
@@ -177,7 +177,7 @@ pub async fn install_java(component: &str, progress: Progress) -> Result<(PathBu
 
 // ---------- Minecraft vanilla ----------
 
-pub async fn install_vanilla(mc_dir: &Path, version: &str, progress: Progress) -> Result<Value> {
+pub async fn install_vanilla(mc_dir: &Path, version: &str, progress: Progress, strict: bool) -> Result<Value> {
     let vdir = mc_dir.join("versions").join(version);
     let json_path = vdir.join(format!("{version}.json"));
     let json: Value = match std::fs::read_to_string(&json_path).ok().and_then(|s| serde_json::from_str(&s).ok()) {
@@ -246,7 +246,7 @@ pub async fn install_vanilla(mc_dir: &Path, version: &str, progress: Progress) -
     }
 
     let p = progress.clone();
-    net::download_all(jobs, false, 24, move |d, t| p(d, t)).await?;
+    net::download_all(jobs, strict, 24, move |d, t| p(d, t)).await?;
     Ok(json)
 }
 
