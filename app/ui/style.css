@@ -226,12 +226,29 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.15) rotate(4
 .link { border: 0; background: none; color: var(--muted); font-size: 13px; text-decoration: underline; }
 .link:hover { color: var(--text); }
 
-/* ---------- Infobulle d'erreur (style Minecraft) ---------- */
-.toast { position: fixed; left: 50%; bottom: 146px; transform: translateX(-50%); max-width: 640px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px;
-  background: rgba(16,0,16,.95); border: 2px solid; border-image: linear-gradient(180deg, #A0302A, #5A1414) 1; color: #EDEDED; font-size: 14px; line-height: 1.45;
-  z-index: 20; user-select: text; animation: toastIn .35s var(--ease); cursor: pointer; }
-.toast .t-title { font-family: var(--mono); font-size: 12px; color: #FF6B5E; }
-@keyframes toastIn { from { opacity: 0; transform: translate(-50%, 10px); } }
+/* ---------- Notifications (en haut à droite) ---------- */
+.toasts { position: fixed; top: 70px; right: 22px; width: 350px; display: flex; flex-direction: column; gap: 10px; z-index: 40; pointer-events: none; }
+.ntf { --c: var(--brass); pointer-events: auto; position: relative; overflow: hidden; display: grid; grid-template-columns: 36px 1fr 26px; gap: 12px; align-items: start;
+  padding: 13px 12px 15px 14px; border-radius: 15px; background: linear-gradient(180deg, rgba(48,45,41,.94), rgba(36,34,31,.94)); backdrop-filter: blur(14px);
+  border: 1px solid var(--line-2); box-shadow: 0 18px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05); animation: ntfIn .5s var(--ease); user-select: text; }
+.ntf::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+.ntf.error { --c: var(--red); } .ntf.success { --c: var(--green); } .ntf.warning { --c: var(--copper); } .ntf.update, .ntf.info { --c: var(--brass); }
+.ntf-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--c);
+  background: color-mix(in srgb, var(--c) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 35%, transparent); }
+.ntf-icon svg { width: 19px; height: 19px; }
+.ntf.success .ntf-icon svg { animation: pop .5s var(--ease) .1s backwards; }
+.ntf-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-top: 1px; }
+.ntf-text strong { font-size: 14px; }
+.ntf-text span { font-size: 13px; line-height: 1.45; color: var(--muted); word-break: break-word; }
+.ntf-close { width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; transition: background .15s, color .15s; }
+.ntf-close:hover { background: rgba(255,255,255,.07); color: var(--text); }
+.ntf-close svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.ntf-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--c); opacity: .7; transform-origin: left; animation: ntfTime linear forwards; }
+.ntf:hover .ntf-bar { animation-play-state: paused; }
+.ntf.out { animation: ntfOut .32s var(--ease) forwards; }
+@keyframes ntfIn { from { opacity: 0; transform: translateX(40px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes ntfOut { to { opacity: 0; transform: translateX(40px) scale(.97); margin-top: -70px; } }
+@keyframes ntfTime { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
 /* ---------- Étincelles ---------- */
 .sparks { position: fixed; inset: 0; pointer-events: none; z-index: 30; }

@@ -129,16 +129,40 @@ $("win-close").addEventListener("click", () => appWindow && appWindow.close());
 /* =====================================================================
    Utilitaires
    ===================================================================== */
-function toast(msg, ms = 9000, title = "Oups") {
-  const t = $("toast");
-  t.querySelector(".t-title").textContent = title;
-  $("toast-text").textContent = msg;
-  t.classList.remove("hidden");
-  t.style.animation = "none"; void t.offsetWidth; t.style.animation = "";
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.add("hidden"), ms);
+/** Notification en haut à droite. type : error | success | info | update | warning (deviné d'après le titre). */
+const TOAST_ICONS = {
+  error: '<path d="M12 8v5M12 16.5v.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
+  success: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/>',
+  update: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/>',
+  warning: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/>',
+};
+function toast(msg, ms = 6000, title = "Oups", type) {
+  type = type || (title === "Oups" || /planté|erreur/i.test(title) ? "error" : /connecté/i.test(title) ? "success" : /mise à jour/i.test(title) ? "update" : /config/i.test(title) ? "warning" : "info");
+  if (title === "Oups") title = "Un problème est survenu";
+  const box = $("toasts");
+  while (box.children.length >= 4) box.firstElementChild.remove();
+  const n = document.createElement("div");
+  n.className = "ntf " + type;
+  n.setAttribute("role", type === "error" ? "alert" : "status");
+  n.innerHTML = `<span class="ntf-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${TOAST_ICONS[type]}</svg></span>
+    <span class="ntf-text"><strong></strong><span></span></span>
+    <button class="ntf-close" aria-label="Fermer"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+    <span class="ntf-bar"></span>`;
+  n.querySelector("strong").textContent = title;
+  n.querySelector(".ntf-text span").textContent = msg;
+  const bar = n.querySelector(".ntf-bar");
+  bar.style.animationDuration = ms + "ms";
+  const close = () => {
+    if (n.classList.contains("out")) return;
+    n.classList.add("out");
+    setTimeout(() => n.remove(), 320);
+  };
+  bar.addEventListener("animationend", close);
+  n.querySelector(".ntf-close").addEventListener("click", close);
+  box.appendChild(n);
+  return n;
 }
-$("toast").addEventListener("click", () => $("toast").classList.add("hidden"));
 
 function mb(bytes) {
   return bytes >= 1e9 ? (bytes / 1e9).toFixed(1) + " Go" : Math.max(1, Math.round(bytes / 1e6)) + " Mo";
@@ -440,9 +464,7 @@ listen("login", async ({ payload }) => {
     $("login").classList.add("hidden");
     state.info = await invoke("get_info");
     renderAccount();
-    toast(`Bienvenue ${payload.name} !`, 4000, "Connecté");
-    $("toast").querySelector(".t-title").style.color = "#7DD87F";
-    setTimeout(() => ($("toast").querySelector(".t-title").style.color = ""), 4200);
+    toast(`Bienvenue ${payload.name} !`, 4000, "Connecté", "success");
   } else if (!$("login").classList.contains("hidden")) {
     $("login-wait").classList.add("hidden");
     $("login-error").textContent = payload.error;
@@ -662,7 +684,7 @@ function setOptional(id, on) {
   state.info.settings.optional = choices;
   saveSettings();
   renderOptional();
-  toast("C'est noté : le changement sera appliqué au prochain lancement du jeu.", 3500, "Mods optionnels");
+  toast("C'est noté : le changement sera appliqué au prochain lancement du jeu.", 3500, "Mods optionnels", "success");
 }
 
 $("mods-search").addEventListener("input", renderMods);
@@ -873,7 +895,7 @@ async function checkUpdate(manual) {
 }
 
 async function installUpdate() {
-  if (state.phase !== "idle") return toast("Attends la fin de la préparation du jeu avant de mettre à jour.");
+  if (state.phase !== "idle") return toast("Attends la fin de la préparation du jeu avant de mettre à jour.", 5000, "Patiente un instant", "warning");
   const u = state.update;
   $("updater").classList.remove("hidden");
   $("upd-sub").textContent = u ? `v${state.info.version} → v${u.version}` : "Téléchargement de la nouvelle version…";
@@ -928,7 +950,7 @@ $("upd-check").addEventListener("click", async () => {
   $("app-version").textContent = `Launcher v${state.info.version} · N4ssD`;
   renderAccount();
   if (!state.info.login_configured) {
-    setTimeout(() => toast("La connexion Microsoft n'est pas encore configurée (identifiant Azure manquant). Voir le README du dépôt.", 12000, "Configuration"), 1400);
+    setTimeout(() => toast("La connexion Microsoft n'est pas encore configurée (identifiant Azure manquant). Voir le README du dépôt.", 12000, "Connexion pas encore configurée", "warning"), 1400);
   }
   loadPack();
   const u = await checkUpdate(false);
