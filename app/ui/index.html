@@ -7,34 +7,58 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<svg class="defs" width="0" height="0" aria-hidden="true">
+        <defs>
+          <linearGradient id="m-brass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F6CD6A"/><stop offset="1" stop-color="#C4862A"/></linearGradient>
+          <linearGradient id="m-copper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EC8A55"/><stop offset="1" stop-color="#A24F29"/></linearGradient>
+          <linearGradient id="m-andesite" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9A958B"/><stop offset="1" stop-color="#5C5750"/></linearGradient>
+          <filter id="m-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".45"/></filter>
+        </defs>
+</svg>
 <div class="app">
-  <header class="top">
-    <div class="brand">
-      <svg class="brand-gear" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="12" fill="currentColor" fill-rule="evenodd"></path></svg>
-      <span id="brand-name">Chargement…</span>
+  <!-- Barre de titre (déplaçable) -->
+  <header class="top rise" style="--d:0ms" data-tauri-drag-region>
+    <div class="brand" data-tauri-drag-region>
+      <svg class="brand-gear" viewBox="-50 -50 100 100" aria-hidden="true"><g id="brand-gear"></g></svg>
+      <span id="brand-name" data-tauri-drag-region>Chargement…</span>
     </div>
     <nav class="tabs" aria-label="Navigation">
+      <span class="tab-ind" id="tab-ind"></span>
       <button class="tab active" data-view="home">Accueil</button>
       <button class="tab" data-view="settings">Réglages</button>
     </nav>
-    <button id="account" class="account">
-      <span id="account-avatar" class="avatar">?</span>
-      <span id="account-name">Se connecter</span>
-    </button>
+    <div class="top-right">
+      <button id="account" class="account">
+        <span id="account-avatar" class="avatar">?</span>
+        <span id="account-name">Se connecter</span>
+      </button>
+      <span class="sep"></span>
+      <div class="winctl">
+        <button id="win-min" aria-label="Réduire"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+        <button id="win-max" aria-label="Agrandir"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1"/></svg></button>
+        <button id="win-close" class="close" aria-label="Fermer"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+      </div>
+    </div>
   </header>
 
+  <!-- Accueil -->
   <main id="view-home" class="view">
-    <section class="hero" id="hero">
-      <svg class="gear g1" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="24" fill-rule="evenodd"></path></svg>
-      <svg class="gear g2" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="16" fill-rule="evenodd"></path></svg>
-      <svg class="gear g3" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="12" fill-rule="evenodd"></path></svg>
+    <section class="hero rise" style="--d:80ms" id="hero">
+      <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+      <svg id="machine" class="machine" viewBox="0 0 700 660" aria-hidden="true">
+        <g id="gears" filter="url(#m-shadow)"></g>
+      </svg>
+      <div class="goggles" id="goggles">
+        <span class="g-title">Statistiques cinétiques</span>
+        <span class="g-line">Vitesse : <b id="rpm">0</b> tr/min <i id="rpm-label">(Lente)</i></span>
+      </div>
       <div class="hero-fade"></div>
       <div class="hero-text">
-        <span class="kicker" id="server-line"><span class="dot" id="server-dot"></span><span id="server-text">Recherche du serveur…</span></span>
-        <h1 id="hero-name">…</h1>
-        <p class="lead">Le modpack officiel du serveur, synchronisé automatiquement à chaque mise à jour.</p>
-        <div class="chips">
-          <span class="chip" id="chip-mc">MINECRAFT</span>
+        <span class="kicker rise" style="--d:260ms"><span class="dot" id="server-dot"></span><span id="server-text">Recherche du serveur…</span></span>
+        <h1 class="title"><span id="hero-name">…</span></h1>
+        <p class="lead rise" style="--d:420ms">Le modpack officiel du serveur, synchronisé automatiquement à chaque mise à jour.</p>
+        <div class="chips rise" style="--d:500ms">
+          <span class="chip" id="chip-mc">NEOFORGE</span>
           <span class="chip" id="chip-pack">MODPACK</span>
           <span class="chip" id="chip-ping">PING —</span>
         </div>
@@ -42,81 +66,102 @@
     </section>
 
     <section class="dock">
-      <div class="panel status">
+      <div class="panel status rise" style="--d:180ms">
         <div class="status-head">
           <span id="status-title">Vérification…</span>
           <span id="status-pct" class="mono accent"></span>
         </div>
-        <div class="belt"><div id="belt-fill" class="belt-fill"></div></div>
+        <div class="belt-wrap" id="belt-wrap">
+          <span class="pulley"></span>
+          <div class="belt"><div class="belt-rubber"></div><div id="belt-fill" class="belt-fill"></div></div>
+          <span class="pulley"></span>
+        </div>
         <span id="status-sub" class="mono muted"></span>
       </div>
-      <div class="panel news">
+      <div class="panel news rise" style="--d:240ms">
         <span class="mono muted label" id="news-title">NOUVEAUTÉS</span>
         <ul id="news-list"></ul>
       </div>
-      <button id="play" class="play" disabled>
+      <button id="play" class="play rise" style="--d:300ms" disabled>
+        <span class="rivet r1"></span><span class="rivet r2"></span><span class="rivet r3"></span><span class="rivet r4"></span>
         <span class="play-text">
           <span id="play-label">Jouer</span>
           <span id="play-sub">chargement…</span>
         </span>
-        <svg class="play-gear" viewBox="0 0 100 100" aria-hidden="true"><path data-gear="12" fill="currentColor" fill-rule="evenodd"></path></svg>
+        <svg class="play-gear" viewBox="-50 -50 100 100" aria-hidden="true"><g id="play-gear"></g></svg>
       </button>
     </section>
   </main>
 
+  <!-- Réglages -->
   <main id="view-settings" class="view hidden">
     <section class="panel settings">
-      <h2>Réglages</h2>
-      <label class="row">
-        <span>
+      <div class="settings-head">
+        <h2>Réglages</h2>
+        <span class="mono muted" id="app-version"></span>
+      </div>
+
+      <div class="card ram-card">
+        <div class="card-text">
           <strong>Mémoire allouée</strong>
-          <small class="muted">Recommandé : 6 Go pour un modpack. Ne dépasse pas la moitié de la RAM de ton PC.</small>
-        </span>
-        <span class="ram">
-          <input id="ram" type="range" min="2048" max="16384" step="512">
-          <output id="ram-out" class="mono accent">6 Go</output>
-        </span>
-      </label>
-      <label class="row">
-        <span>
+          <small class="muted">6 Go conseillés pour un gros modpack. Ne dépasse pas la moitié de la RAM de ton PC.</small>
+        </div>
+        <div class="ram">
+          <output id="ram-out" class="ram-value">6 Go</output>
+          <input id="ram" type="range" min="2048" max="16384" step="512" aria-label="Mémoire allouée">
+          <div class="ram-scale mono muted"><span>2 Go</span><span>16 Go</span></div>
+        </div>
+      </div>
+
+      <label class="card row">
+        <span class="card-text">
           <strong>Réduire le launcher pendant le jeu</strong>
           <small class="muted">Il réapparaît quand tu quittes Minecraft.</small>
         </span>
         <input id="minimize" type="checkbox" class="switch">
       </label>
-      <div class="row">
-        <span><strong>Dossiers</strong><small class="muted">Captures d'écran, mods, journaux…</small></span>
+
+      <div class="card row">
+        <span class="card-text"><strong>Dossiers</strong><small class="muted">Captures d'écran, mods, journaux…</small></span>
         <span class="btns">
           <button class="ghost" data-folder="jeu">Dossier du jeu</button>
           <button class="ghost" data-folder="logs">Journaux</button>
         </span>
       </div>
-      <div class="row">
-        <span><strong>Compte</strong><small class="muted" id="settings-account">Non connecté</small></span>
+
+      <div class="card row">
+        <span class="card-text"><strong>Compte</strong><small class="muted" id="settings-account">Non connecté</small></span>
         <button class="ghost danger" id="logout">Se déconnecter</button>
       </div>
-      <p class="mono muted version" id="app-version"></p>
     </section>
   </main>
 
   <span class="sign">N4ssD</span>
 </div>
 
+<!-- Connexion -->
 <div id="login" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="login-title">
   <div class="modal-card">
+    <span class="rivet r1"></span><span class="rivet r2"></span><span class="rivet r3"></span><span class="rivet r4"></span>
+    <svg class="modal-gear" viewBox="-50 -50 100 100" aria-hidden="true"><g id="modal-gear"></g></svg>
     <h2 id="login-title">Connexion Microsoft</h2>
     <p class="muted" id="login-help">Préparation…</p>
-    <div class="code mono" id="login-code">· · · · · · · ·</div>
-    <div class="btns">
+    <div class="flaps" id="login-code" aria-live="polite"></div>
+    <div class="btns center">
       <button class="primary" id="login-open" disabled>Ouvrir la page Microsoft</button>
       <button class="ghost" id="login-copy" disabled>Copier le code</button>
     </div>
+    <p class="wait mono muted hidden" id="login-wait">En attente de validation…</p>
     <p class="error hidden" id="login-error"></p>
     <button class="link" id="login-close">Annuler</button>
   </div>
 </div>
 
-<div id="toast" class="toast hidden" role="alert"></div>
+<div id="toast" class="toast hidden" role="alert">
+  <span class="t-title">Oups</span>
+  <span id="toast-text"></span>
+</div>
+<div id="sparks" class="sparks" aria-hidden="true"></div>
 
 <script src="app.js"></script>
 </body>
