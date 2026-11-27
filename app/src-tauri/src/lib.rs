@@ -7,11 +7,12 @@ mod status;
 mod sync;
 
 use anyhow::anyhow;
-use config::{Pack, Settings, PACK_BASE_URL};
+use config::{memory, Pack, Settings, PACK_BASE_URL};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_updater::UpdaterExt;
 
 #[derive(Default)]
 struct AppState {
@@ -57,6 +58,8 @@ struct Info {
     settings: Settings,
     login_configured: bool,
     version: String,
+    system_ram_mb: u64,
+    safe_ram_mb: u64,
 }
 
 #[tauri::command]
@@ -66,6 +69,8 @@ fn get_info() -> Info {
         settings: Settings::load(),
         login_configured: !config::CLIENT_ID.trim().is_empty(),
         version: env!("CARGO_PKG_VERSION").into(),
+        system_ram_mb: memory::total_mb(),
+        safe_ram_mb: memory::safe_max_mb(memory::total_mb()),
     }
 }
 
@@ -201,7 +206,11 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
         javaw: &javaw,
         version_id: &id,
         account: &acc,
-        ram_mb: settings.ram_mb,
+        ram_mb: if settings.ram_mb == 0 {
+            memory::recommended_mb(memory::total_mb(), pack.ram) as u32
+        } else {
+            settings.ram_mb
+        },
         server: &pack.address,
     })?;
     let _ = app.emit("launched", acc.name.clone());
@@ -222,9 +231,54 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ---------- Mise à jour du launcher ----------
+
+#[derive(Serialize)]
+struct UpdateInfo {
+    version: String,
+    notes: Option<String>,
+}
+
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    match updater.check().await {
+        Ok(Some(u)) => Ok(Some(UpdateInfo { version: u.version.clone(), notes: u.body.clone() })),
+        Ok(None) => Ok(None),
+        Err(e) => Err(format!("Impossible de vérifier les mises à jour : {e}")),
+    }
+}
+
+#[tauri::command]
+async fn install_update(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if state.busy.load(Ordering::SeqCst) {
+        return Err("Attends la fin de la préparation du jeu.".into());
+    }
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Le launcher est déjà à jour.".to_string())?;
+    let app2 = app.clone();
+    let mut done: u64 = 0;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                done += chunk as u64;
+                let _ = app2.emit("update-progress", (done, total));
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| format!("La mise à jour a échoué : {e}"))?;
+    app.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             get_info,
@@ -235,7 +289,9 @@ pub fn run() {
             save_settings,
             open_url,
             open_folder,
-            play
+            play,
+            check_update,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage du launcher");

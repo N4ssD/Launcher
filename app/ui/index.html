@@ -15,6 +15,7 @@
           <filter id="m-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".45"/></filter>
         </defs>
 </svg>
+<div class="bgimg" aria-hidden="true"></div>
 <div class="app">
   <!-- Barre de titre (déplaçable) -->
   <header class="top rise" style="--d:0ms" data-tauri-drag-region>
@@ -102,14 +103,20 @@
       </div>
 
       <div class="card ram-card">
-        <div class="card-text">
-          <strong>Mémoire allouée</strong>
-          <small class="muted">6 Go conseillés pour un gros modpack. Ne dépasse pas la moitié de la RAM de ton PC.</small>
+        <div class="ram-top">
+          <div class="card-text">
+            <strong>Mémoire allouée</strong>
+            <small class="muted" id="ram-info">Ton PC : — · Conseillé : —</small>
+          </div>
+          <label class="auto-toggle"><input id="ram-auto" type="checkbox" class="switch"><span>Automatique</span></label>
         </div>
         <div class="ram">
-          <output id="ram-out" class="ram-value">6 Go</output>
-          <input id="ram" type="range" min="2048" max="16384" step="512" aria-label="Mémoire allouée">
-          <div class="ram-scale mono muted"><span>2 Go</span><span>16 Go</span></div>
+          <div class="ram-row">
+            <input id="ram" type="range" min="2048" max="16384" step="512" aria-label="Mémoire allouée">
+            <output id="ram-out" class="ram-value">6 Go</output>
+          </div>
+          <div class="ram-scale mono muted"><span>2 Go</span><span id="ram-max-label">16 Go</span></div>
+          <small class="ram-warn hidden" id="ram-warn"></small>
         </div>
       </div>
 
@@ -126,6 +133,17 @@
         <span class="btns">
           <button class="ghost" data-folder="jeu">Dossier du jeu</button>
           <button class="ghost" data-folder="logs">Journaux</button>
+        </span>
+      </div>
+
+      <div class="card row">
+        <span class="card-text">
+          <strong>Mise à jour du launcher</strong>
+          <small class="muted" id="upd-status">Version actuelle : —</small>
+        </span>
+        <span class="btns">
+          <label class="auto-toggle"><input id="upd-auto" type="checkbox" class="switch"><span>Automatique</span></label>
+          <button class="ghost" id="upd-check">Rechercher</button>
         </span>
       </div>
 
@@ -154,6 +172,21 @@
     <p class="wait mono muted hidden" id="login-wait">En attente de validation…</p>
     <p class="error hidden" id="login-error"></p>
     <button class="link" id="login-close">Annuler</button>
+  </div>
+</div>
+
+<div id="updater" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="upd-title">
+  <div class="modal-card">
+    <span class="rivet r1"></span><span class="rivet r2"></span><span class="rivet r3"></span><span class="rivet r4"></span>
+    <svg class="modal-gear spin" viewBox="-50 -50 100 100" aria-hidden="true"><g id="upd-gear"></g></svg>
+    <h2 id="upd-title">Mise à jour du launcher</h2>
+    <p class="muted" id="upd-sub">Téléchargement de la nouvelle version…</p>
+    <div class="belt-wrap moving upd-belt">
+      <span class="pulley"></span>
+      <div class="belt"><div class="belt-rubber"></div><div id="upd-fill" class="belt-fill indeterminate"></div></div>
+      <span class="pulley"></span>
+    </div>
+    <p class="mono muted small" id="upd-pct">Préparation…</p>
   </div>
 </div>
 

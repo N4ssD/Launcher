@@ -42,6 +42,7 @@ Ne mets dans `modpack/mods/` que les mods utiles côté client (pas les mods uni
 | `name` | Nom affiché dans le launcher |
 | `address` | Adresse du serveur, avec `:port` si ce n'est pas 25565. Le jeu s'y connecte directement |
 | `neoforge` | Mets la **même version que ton serveur** (ex. `21.1.265`). `latest` prend la dernière version stable |
+| `ram` | RAM conseillée pour le modpack, en Mo (ex. `8192` = 8 Go). Le mode « Automatique » du launcher l'utilise, sans dépasser ce que le PC du joueur peut supporter |
 | `version` / `news` | Numéro et nouveautés affichés sur l'accueil (`add`, `update`, `remove` ou `info`) |
 
 Une modification de ce fichier est visible dans le launcher sans recompiler l'exe.
@@ -65,6 +66,21 @@ Comme tous les launchers non officiels, celui-ci a besoin de sa propre « applic
 
 Tant que Mojang n'a pas validé la demande, le launcher affiche « Mojang n'a pas encore autorisé ce launcher » au moment de la connexion. Tout le reste fonctionne déjà.
 
+## Mise à jour automatique du launcher
+
+Quand tu publies une nouvelle version, les joueurs n'ont plus besoin de retélécharger l'exe : au démarrage, le launcher la détecte, la télécharge et redémarre tout seul. On peut aussi désactiver cette option et vérifier à la main dans **Réglages › Mise à jour du launcher**.
+
+**À faire une seule fois :** ajoute la clé de signature dans GitHub :
+**Settings › Secrets and variables › Actions › onglet Secrets › New repository secret**
+- Name : `TAURI_SIGNING_PRIVATE_KEY`
+- Secret : le contenu du fichier de clé privée (une seule ligne de texte).
+
+Garde ce fichier précieusement et ne le partage avec personne : sans lui, tu ne pourras plus publier de mises à jour automatiques.
+
+**Pour publier une nouvelle version**, augmente le numéro `version` dans `app/src-tauri/tauri.conf.json` (par ex. `1.2.0` → `1.3.0`). GitHub compile la nouvelle version et les launchers déjà installés se mettent à jour au prochain démarrage.
+
+> Les personnes qui ont une version antérieure à 1.2.0 doivent télécharger l'exe une dernière fois à la main.
+
 ## Changer le nom du launcher
 
 Remplace « TonServeur » par le nom voulu à deux endroits :
@@ -82,6 +98,10 @@ Dans `%APPDATA%\N4ssD-Launcher` :
 - `minecraft` : version, bibliothèques, ressources ;
 - `java` : le Java de Mojang ;
 - `logs` : journaux (`jeu.log` en cas de crash).
+
+## Mémoire (RAM)
+
+En mode « Automatique » (par défaut), le launcher prend la RAM conseillée dans `pack.json` sans dépasser ce que le PC peut supporter : il laisse toujours au moins 30 % de la RAM (2,5 Go minimum) à Windows. Le joueur peut aussi régler la valeur à la main, jusqu'à la RAM totale de son PC ; au-delà de la zone sûre, la barre devient rouge avec un avertissement.
 
 ## Structure du dépôt
 

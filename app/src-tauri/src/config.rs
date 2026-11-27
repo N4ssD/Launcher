@@ -44,10 +44,13 @@ pub struct Settings {
     pub ram_mb: u32,
     #[serde(default = "default_true")]
     pub minimize_on_launch: bool,
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
 }
 
+/// 0 = automatique (valeur conseillée selon le PC et le modpack)
 fn default_ram() -> u32 {
-    6144
+    0
 }
 fn default_true() -> bool {
     true
@@ -55,7 +58,7 @@ fn default_true() -> bool {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { ram_mb: default_ram(), minimize_on_launch: true }
+        Settings { ram_mb: default_ram(), minimize_on_launch: true, auto_update: true }
     }
 }
 
@@ -87,6 +90,27 @@ pub struct Pack {
     pub version: String,
     #[serde(default)]
     pub news: Vec<News>,
+    /// RAM conseillée pour le modpack, en Mo (facultatif)
+    #[serde(default)]
+    pub ram: Option<u32>,
+}
+
+/// Mémoire du PC et valeurs conseillées (en Mo).
+pub mod memory {
+    pub fn total_mb() -> u64 {
+        let mut s = sysinfo::System::new();
+        s.refresh_memory();
+        s.total_memory() / 1024 / 1024
+    }
+    /// Au-delà, Windows risque de manquer de mémoire : on garde au moins 30 % (min 2,5 Go) pour le système.
+    pub fn safe_max_mb(total: u64) -> u64 {
+        let reserve = ((total as f64) * 0.3).max(2560.0);
+        (((total as f64 - reserve).max(2048.0)) as u64) / 512 * 512
+    }
+    pub fn recommended_mb(total: u64, pack: Option<u32>) -> u64 {
+        let want = pack.map(|v| v as u64).unwrap_or(6144);
+        want.min(safe_max_mb(total)).max(2048) / 512 * 512
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

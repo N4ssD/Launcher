@@ -22,7 +22,10 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; user-select: none; -webkit-font-smoothing: antialiased; }
-body { background: radial-gradient(120% 80% at 10% 0%, #24221F 0%, var(--bg) 60%); }
+body { background: var(--bg); }
+.bgimg { position: fixed; inset: -24px; background: url(fond.jpg) center / cover no-repeat; filter: blur(3px) saturate(1.05); z-index: 0; animation: bgIn 1.4s ease forwards; }
+@keyframes bgIn { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+body::before { content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 90% at 30% 40%, rgba(20,18,16,.2), rgba(14,13,12,.7)); }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:disabled { cursor: default; }
 .hidden { display: none !important; }
@@ -30,7 +33,7 @@ button:disabled { cursor: default; }
 .muted { color: var(--muted); }
 .accent { color: var(--brass); }
 
-.app { height: 100vh; display: flex; flex-direction: column; gap: 14px; padding: 10px 22px 20px; position: relative; }
+.app { height: 100vh; display: flex; flex-direction: column; gap: 14px; padding: 10px 22px 20px; position: relative; z-index: 2; }
 
 /* ---------- Entrée animée ---------- */
 .rise { opacity: 0; animation: rise .7s var(--ease) forwards; animation-delay: var(--d, 0ms); }
@@ -247,3 +250,30 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.15) rotate(4
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 .defs { position: absolute; width: 0; height: 0; }
+
+/* ---------- Fond : panneaux en verre dépoli ---------- */
+.hero { background-color: rgba(30,28,26,.12); backdrop-filter: blur(1.5px);
+  background-image: linear-gradient(rgba(233,180,76,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(233,180,76,.05) 1px, transparent 1px);
+  background-size: 40px 40px; }
+.hero-fade { background: linear-gradient(90deg, rgba(20,18,16,.78) 0%, rgba(20,18,16,.35) 42%, transparent 65%), linear-gradient(0deg, rgba(20,18,16,.55), transparent 40%); }
+.panel { background: linear-gradient(180deg, rgba(46,43,39,.72), rgba(39,37,34,.72)); backdrop-filter: blur(10px); }
+.tabs, .account { background: rgba(39,37,34,.7); backdrop-filter: blur(8px); }
+.settings.panel { background: linear-gradient(180deg, rgba(46,43,39,.82), rgba(39,37,34,.82)); }
+
+/* ---------- RAM ---------- */
+.ram-card { flex-direction: column; align-items: stretch; gap: 14px; }
+.ram-top { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.ram { width: 100%; }
+.ram-row { display: flex; align-items: center; gap: 18px; }
+.ram-row input { flex: 1; }
+.ram-value { min-width: 90px; }
+input[type=range]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--brass) 0 var(--p, 30%), #1A1917 var(--p, 30%) var(--s, 75%), rgba(224,106,90,.35) var(--s, 75%) 100%); }
+input[type=range]:disabled { opacity: .55; cursor: default; }
+.ram-warn { color: var(--red); font-size: 13px; }
+.ram-value.danger { color: var(--red); }
+.auto-toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer; }
+
+/* ---------- Mise à jour ---------- */
+.modal-gear.spin { animation: spin 2.4s linear infinite; }
+.upd-belt { width: 100%; }
+.small { font-size: 12px; margin: 0; }

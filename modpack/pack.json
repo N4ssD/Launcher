@@ -5,6 +5,10 @@
   "neoforge": "latest",
   "version": "1.0",
   "news": [
-    { "type": "info", "text": "Bienvenue sur le launcher du serveur !" }
-  ]
+    {
+      "type": "info",
+      "text": "Bienvenue sur le launcher du serveur !"
+    }
+  ],
+  "ram": 6144
 }

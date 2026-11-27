@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TonServeur",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "identifier": "fr.n4ssd.launcher",
   "build": {
     "frontendDist": "../ui"
@@ -46,6 +46,18 @@
           "French"
         ],
         "displayLanguageSelector": false
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgxMkZBOEVCNzY1QjRCREQKUldUZFMxdDI2Nmd2Z1hBK2plVnQ1U1h0dHliRnpCYXBUVFE1aEJBWVhXT3B0R1ZsZVFzWWhtcEQK",
+      "endpoints": [
+        "https://github.com/N4ssD/Launcher/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }
