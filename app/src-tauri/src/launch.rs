@@ -106,6 +106,9 @@ pub struct LaunchOptions<'a> {
     pub account: &'a Account,
     pub ram_mb: u32,
     pub server: &'a str,
+    pub fullscreen: bool,
+    pub width: u32,
+    pub height: u32,
 }
 
 pub fn launch(o: LaunchOptions) -> Result<Child> {
@@ -188,6 +191,11 @@ pub fn launch(o: LaunchOptions) -> Result<Child> {
     args.push(v["mainClass"].as_str().ok_or_else(|| anyhow!("mainClass manquant"))?.to_string());
     args.extend(game.iter().map(|a| substitute(a, &vars)));
 
+    if o.fullscreen {
+        args.push("--fullscreen".into());
+    } else if o.width >= 640 && o.height >= 360 {
+        args.extend(["--width".to_string(), o.width.to_string(), "--height".to_string(), o.height.to_string()]);
+    }
     if !o.server.trim().is_empty() {
         let (host, port) = split_address(o.server);
         args.push("--quickPlayMultiplayer".into());

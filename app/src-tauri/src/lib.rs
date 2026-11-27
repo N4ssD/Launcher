@@ -2,7 +2,9 @@ mod auth;
 mod config;
 mod install;
 mod launch;
+mod modrinth;
 mod net;
+mod presence;
 mod status;
 mod sync;
 
@@ -152,6 +154,8 @@ fn open_url(url: String) -> Result<(), String> {
 fn open_folder(which: String) -> Result<(), String> {
     let dir = match which.as_str() {
         "logs" => config::data_dir().join("logs"),
+        "screenshots" => config::game_dir().join("screenshots"),
+        "crash" => config::game_dir().join("crash-reports"),
         _ => config::game_dir(),
     };
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -181,7 +185,13 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
 
     emit(app, "pack", "Récupération du modpack", -1.0);
     let pack = fetch_pack().await?;
-    let manifest = sync::fetch_manifest().await?;
+    let mut manifest = sync::fetch_manifest().await?;
+    let opt = modrinth::resolve(&pack.optional, &pack.minecraft).await;
+    for id in modrinth::enabled(&opt, &settings.optional) {
+        if let Some(f) = opt.iter().find(|r| r.id == id).and_then(|r| r.file.clone()) {
+            manifest.files.push(f);
+        }
+    }
     let mc_dir = config::mc_dir();
     let game_dir = config::game_dir();
 
@@ -212,7 +222,20 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
             settings.ram_mb
         },
         server: &pack.address,
+        fullscreen: settings.fullscreen,
+        width: settings.width,
+        height: settings.height,
     })?;
+    if settings.discord_rpc && !pack.discord_app_id.trim().is_empty() {
+        let start = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        presence::send(presence::Msg::Playing {
+            app_id: pack.discord_app_id.trim().to_string(),
+            details: format!("Joue sur {}", pack.name),
+            state: if pack.version.is_empty() { "Modpack officiel".into() } else { format!("Modpack v{}", pack.version) },
+            start,
+            button: if pack.links.discord.starts_with("https://") { Some(("Rejoindre le serveur".into(), pack.links.discord.clone())) } else { None },
+        });
+    }
     let _ = app.emit("launched", acc.name.clone());
     if settings.minimize_on_launch {
         if let Some(w) = app.get_webview_window("main") {
@@ -222,6 +245,7 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
     let app2 = app.clone();
     std::thread::spawn(move || {
         let code = child.wait().ok().and_then(|s| s.code());
+        presence::send(presence::Msg::Clear);
         let _ = app2.emit("game-exit", code);
         if let Some(w) = app2.get_webview_window("main") {
             let _ = w.unminimize();
@@ -229,6 +253,127 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
         }
     });
     Ok(())
+}
+
+// ---------- Mods ----------
+
+#[derive(Serialize)]
+struct ModsInfo {
+    mods: Vec<serde_json::Value>,
+    optional: Vec<modrinth::Resolved>,
+    enabled: Vec<String>,
+}
+
+#[tauri::command]
+async fn get_mods() -> Result<ModsInfo, String> {
+    let pack = fetch_pack().await.map_err(err)?;
+    let manifest = sync::fetch_manifest().await.map_err(err)?;
+    let mut mods: Vec<serde_json::Value> = manifest
+        .files
+        .iter()
+        .filter(|f| f.path.starts_with("mods/") && f.path.to_lowercase().ends_with(".jar"))
+        .map(|f| {
+            let mut v = f.info.clone().unwrap_or_else(|| serde_json::json!({}));
+            if v.get("name").and_then(|n| n.as_str()).map(|n| n.is_empty()).unwrap_or(true) {
+                let stem = f.path.trim_start_matches("mods/").trim_end_matches(".jar").to_string();
+                v["name"] = serde_json::Value::String(stem);
+            }
+            v["size"] = serde_json::json!(f.size);
+            v
+        })
+        .collect();
+    mods.sort_by_key(|m| m["name"].as_str().unwrap_or("").to_lowercase());
+    let optional = modrinth::resolve(&pack.optional, &pack.minecraft).await;
+    let enabled = modrinth::enabled(&optional, &Settings::load().optional);
+    Ok(ModsInfo { mods, optional, enabled })
+}
+
+// ---------- Captures d'écran ----------
+
+#[derive(Serialize)]
+struct Shot {
+    path: String,
+    name: String,
+    modified: u64,
+}
+
+#[tauri::command]
+fn list_screenshots() -> Vec<Shot> {
+    let dir = config::game_dir().join("screenshots");
+    let mut out: Vec<Shot> = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().extension().map(|x| x.eq_ignore_ascii_case("png")).unwrap_or(false))
+        .map(|e| Shot {
+            path: e.path().to_string_lossy().to_string(),
+            name: e.file_name().to_string_lossy().to_string(),
+            modified: e
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        })
+        .collect();
+    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out.truncate(120);
+    out
+}
+
+#[tauri::command]
+fn open_file(path: String) -> Result<(), String> {
+    let p = std::path::PathBuf::from(&path);
+    let shots = config::game_dir().join("screenshots");
+    if !p.starts_with(&shots) || !p.exists() {
+        return Err("Fichier refusé".into());
+    }
+    open::that_detached(p).map_err(|e| e.to_string())
+}
+
+// ---------- Rapport de crash ----------
+
+#[derive(Serialize)]
+struct CrashInfo {
+    text: String,
+    source: String,
+}
+
+fn tail(text: &str, lines: usize) -> String {
+    let v: Vec<&str> = text.lines().collect();
+    v[v.len().saturating_sub(lines)..].join("\n")
+}
+
+#[tauri::command]
+fn crash_info() -> CrashInfo {
+    let dir = config::game_dir().join("crash-reports");
+    let recent = std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .filter(|(t, _)| t.elapsed().map(|d| d.as_secs() < 900).unwrap_or(false))
+        .max_by_key(|(t, _)| *t);
+    if let Some((_, p)) = recent {
+        if let Ok(t) = std::fs::read_to_string(&p) {
+            return CrashInfo { text: t, source: p.file_name().unwrap_or_default().to_string_lossy().to_string() };
+        }
+    }
+    let log = std::fs::read_to_string(config::data_dir().join("logs").join("jeu.log")).unwrap_or_default();
+    CrashInfo { text: tail(&log, 250), source: "jeu.log".into() }
+}
+
+#[tauri::command]
+async fn share_crash(text: String) -> Result<String, String> {
+    let r = net::client()
+        .post("https://api.mclo.gs/1/log")
+        .form(&[("content", text.as_str())])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let v: serde_json::Value = r.json().await.map_err(|e| e.to_string())?;
+    v["url"].as_str().map(String::from).ok_or_else(|| "Envoi du rapport impossible".into())
 }
 
 // ---------- Mise à jour du launcher ----------
@@ -291,7 +436,12 @@ pub fn run() {
             open_folder,
             play,
             check_update,
-            install_update
+            install_update,
+            get_mods,
+            list_screenshots,
+            open_file,
+            crash_info,
+            share_crash
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage du launcher");

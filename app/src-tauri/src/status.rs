@@ -14,6 +14,14 @@ pub struct ServerStatus {
     pub max: i64,
     pub ping_ms: u64,
     pub version: String,
+    /// Échantillon de joueurs connectés (pseudo + UUID), si le serveur le donne
+    pub sample: Vec<Player>,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct Player {
+    pub name: String,
+    pub id: String,
 }
 
 fn varint(mut v: i32, out: &mut Vec<u8>) {
@@ -83,5 +91,15 @@ async fn ping_inner(address: &str) -> Result<ServerStatus> {
         max: v["players"]["max"].as_i64().unwrap_or(0),
         ping_ms,
         version: v["version"]["name"].as_str().unwrap_or("").to_string(),
+        sample: v["players"]["sample"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| Some(Player { name: p["name"].as_str()?.to_string(), id: p["id"].as_str().unwrap_or("").to_string() }))
+                    .filter(|p| !p.name.contains('§') && !p.id.starts_with("00000000-0000-0000"))
+                    .take(12)
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }

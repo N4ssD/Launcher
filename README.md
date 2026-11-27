@@ -47,6 +47,26 @@ Ne mets dans `modpack/mods/` que les mods utiles côté client (pas les mods uni
 
 Une modification de ce fichier est visible dans le launcher sans recompiler l'exe.
 
+### Liens, Discord et mods optionnels
+
+```json
+"links": { "discord": "https://discord.gg/ton-invitation", "site": "https://ton-site.fr" },
+"discord_app_id": "123456789012345678",
+"optional": [
+  { "modrinth": "xaeros-minimap", "name": "Minimap", "description": "Petite carte en haut de l'écran.", "default": false },
+  { "modrinth": "iris", "name": "Iris", "requires": ["sodium"] },
+  { "modrinth": "complementary-reimagined", "name": "Shaders", "dir": "shaderpacks", "loader": "iris", "requires": ["iris"] }
+]
+```
+
+- `links` : affiche des boutons Discord et Site en haut du launcher (laisse vide pour les masquer).
+- `discord_app_id` : active le statut « Joue sur TonServeur » sur Discord. Crée une application sur https://discord.com/developers/applications, copie son **Application ID**, puis dans **Rich Presence › Art Assets**, ajoute une image nommée `logo`. Le bouton « Rejoindre le serveur » de ce statut utilise le lien Discord ci-dessus.
+- `optional` : les mods que chaque joueur peut activer dans l'onglet **Mods**. Ils sont téléchargés depuis Modrinth (`modrinth` = l'identifiant dans l'adresse de la page, par ex. modrinth.com/mod/**xaeros-minimap**), donc tu n'as pas à les héberger. `dir` : `mods` (par défaut), `shaderpacks` ou `resourcepacks`. `requires` : les autres mods optionnels nécessaires, activés automatiquement avec lui. Si un mod n'existe pas pour ta version de Minecraft, il apparaît comme « Pas disponible ».
+
+### Onglet « Mods »
+
+Il liste les mods de `modpack/mods/` avec leur vrai nom, leur version, leur description et leur icône : tout est lu automatiquement dans les `.jar` quand tu les déposes. Après chaque changement, les mods ajoutés portent le badge **NOUVEAU** et les mods modifiés **MIS À JOUR**.
+
 ### Onglet « Nouveautés »
 
 L'historique complet affiché dans l'onglet Nouveautés vient du champ `changelog` de `pack.json`. Mets la plus récente **en premier** :

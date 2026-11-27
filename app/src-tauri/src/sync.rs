@@ -21,6 +21,12 @@ pub struct ManifestFile {
     pub size: u64,
     #[serde(default)]
     pub url: String,
+    /// Infos du mod (nom, version, description, icône, statut) lues dans le .jar
+    #[serde(default, rename = "mod", skip_serializing_if = "Option::is_none")]
+    pub info: Option<serde_json::Value>,
+    /// Fichier d'un mod optionnel (supprimé quand le joueur le désactive)
+    #[serde(default, skip)]
+    pub optional: bool,
 }
 
 /// Dossiers entièrement gérés par le launcher : ce qui n'est pas dans le manifeste y est supprimé.
@@ -113,8 +119,24 @@ pub async fn fetch_manifest() -> Result<Manifest> {
     net::get_json(&format!("{PACK_BASE_URL}manifest.json?t={t}")).await
 }
 
+fn optional_state_path(game_dir: &Path) -> PathBuf {
+    game_dir.join(".launcher-optional.json")
+}
+
 pub async fn sync(game_dir: &Path, m: &Manifest, progress: crate::install::Progress) -> Result<()> {
     std::fs::create_dir_all(game_dir.join("mods"))?;
+    // Supprime les fichiers optionnels installés avant et désactivés depuis.
+    let wanted_opt: HashSet<String> = m.files.iter().filter(|f| f.optional).map(|f| f.path.clone()).collect();
+    let before: Vec<String> = std::fs::read_to_string(optional_state_path(game_dir))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    for p in before.iter().filter(|p| !wanted_opt.contains(*p)) {
+        if let Some(rel) = safe_rel(p) {
+            let _ = std::fs::remove_file(game_dir.join(rel));
+        }
+    }
+    std::fs::write(optional_state_path(game_dir), serde_json::to_string(&wanted_opt.iter().collect::<Vec<_>>())?)?;
     let gd = game_dir.to_path_buf();
     let mc = m.clone();
     let (jobs, remove, new_state) = tokio::task::spawn_blocking(move || plan(&gd, &mc)).await??;

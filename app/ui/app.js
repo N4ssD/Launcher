@@ -241,6 +241,9 @@ async function loadPack() {
     const ul = $("news-list");
     ul.innerHTML = "";
     renderChangelog(p);
+    const links = p.links || {};
+    $("link-discord").classList.toggle("hidden", !(links.discord || "").startsWith("https://"));
+    $("link-site").classList.toggle("hidden", !(links.site || "").startsWith("https://"));
     const latest = (p.changelog && p.changelog[0]) || null;
     const items = ((p.news && p.news.length ? p.news : latest ? latest.items : []) || []).slice(0, 3);
     if (!items.length) items.push({ type: "info", text: "Rien de nouveau pour l'instant" });
@@ -287,7 +290,26 @@ async function refreshServer() {
   $("server-dot").className = "dot " + (s.online ? "on" : "off");
   $("server-text").textContent = s.online ? `Serveur en ligne · ${s.players} / ${s.max} joueurs` : "Serveur hors ligne";
   $("chip-ping").textContent = s.online ? `PING ${s.ping_ms} ms` : "PING —";
+  const heads = $("heads");
+  heads.innerHTML = "";
+  const sample = (s.online && s.sample) || [];
+  $("players").classList.toggle("hidden", !sample.length);
+  sample.slice(0, 8).forEach((pl) => {
+    const img = new Image();
+    img.src = `https://mc-heads.net/avatar/${pl.id || pl.name}/32`;
+    img.alt = pl.name;
+    img.title = pl.name;
+    img.onerror = () => { const f = document.createElement("span"); f.textContent = pl.name[0].toUpperCase(); f.title = pl.name; img.replaceWith(f); };
+    heads.appendChild(img);
+  });
+  if (s.players > Math.min(8, sample.length) && sample.length) {
+    const more = document.createElement("span");
+    more.textContent = "+" + (s.players - Math.min(8, sample.length));
+    heads.appendChild(more);
+  }
 }
+$("link-discord").addEventListener("click", () => state.pack && invoke("open_url", { url: state.pack.links.discord }));
+$("link-site").addEventListener("click", () => state.pack && invoke("open_url", { url: state.pack.links.site }));
 
 /* =====================================================================
    Jouer
@@ -340,9 +362,7 @@ listen("launched", () => {
 
 listen("game-exit", ({ payload }) => {
   backToIdle();
-  if (payload !== null && payload !== 0) {
-    toast(`Minecraft s'est fermé avec une erreur (code ${payload}). Ouvre Réglages › Journaux et regarde le fichier jeu.log.`, 12000, "Le jeu a planté");
-  }
+  if (payload !== null && payload !== 0) showCrash(payload);
 });
 
 listen("play-error", ({ payload }) => {
@@ -498,6 +518,240 @@ function renderChangelog(p) {
 $("news-all").addEventListener("click", () => showView("news"));
 
 /* =====================================================================
+   Onglet Mods
+   ===================================================================== */
+state.mods = null; state.modsAt = 0; state.modFilter = "all";
+function gearIcon() {
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("viewBox", "-50 -50 100 100");
+  buildGear(el("g", {}, svg), 10, 7.4, "andesite");
+  return svg;
+}
+function iconBox(url) {
+  const box = document.createElement("div");
+  box.className = "mod-icon";
+  if (url) {
+    const img = new Image();
+    img.alt = "";
+    img.onerror = () => { img.remove(); box.appendChild(gearIcon()); };
+    img.src = url;
+    box.appendChild(img);
+  } else box.appendChild(gearIcon());
+  return box;
+}
+
+async function loadMods(force) {
+  if (!force && state.mods && Date.now() - state.modsAt < 120000) return renderMods();
+  $("mods-count").textContent = "Chargement…";
+  try {
+    state.mods = await invoke("get_mods");
+    state.modsAt = Date.now();
+    renderMods();
+  } catch (e) {
+    $("mods-count").textContent = "Impossible de charger la liste des mods.";
+    toast(String(e));
+  }
+}
+
+function renderMods() {
+  const data = state.mods;
+  if (!data) return;
+  const q = $("mods-search").value.trim().toLowerCase();
+  const f = state.modFilter;
+  const list = data.mods.filter((m) =>
+    (f === "all" || m.status === f) &&
+    (!q || (m.name || "").toLowerCase().includes(q) || (m.description || "").toLowerCase().includes(q) || (m.id || "").includes(q)));
+  const nNew = data.mods.filter((m) => m.status === "new").length, nUp = data.mods.filter((m) => m.status === "updated").length;
+  $("mods-count").textContent = `${data.mods.length} mod${data.mods.length > 1 ? "s" : ""} sur le serveur` +
+    (nNew ? ` · ${nNew} nouveau${nNew > 1 ? "x" : ""}` : "") + (nUp ? ` · ${nUp} mis à jour` : "");
+  const grid = $("mods-grid");
+  grid.innerHTML = "";
+  if (!list.length) {
+    const e = document.createElement("p");
+    e.className = "empty";
+    e.textContent = data.mods.length ? "Aucun mod ne correspond." : "Aucun mod pour l'instant : dépose tes .jar dans modpack/mods sur GitHub.";
+    grid.appendChild(e);
+  }
+  list.forEach((m, i) => {
+    const card = document.createElement("div");
+    card.className = "mod";
+    card.style.animationDelay = Math.min(i, 20) * 25 + "ms";
+    const text = document.createElement("div");
+    text.className = "mod-text";
+    const name = document.createElement("div");
+    name.className = "mod-name";
+    const n = document.createElement("span");
+    n.textContent = m.name;
+    name.appendChild(n);
+    if (m.status === "new" || m.status === "updated") {
+      const b = document.createElement("span");
+      b.className = "badge " + m.status;
+      b.textContent = m.status === "new" ? "NOUVEAU" : "MIS À JOUR";
+      name.appendChild(b);
+    }
+    const ver = document.createElement("span");
+    ver.className = "mod-ver";
+    ver.textContent = m.version ? "v" + m.version : "";
+    const desc = document.createElement("span");
+    desc.className = "mod-desc";
+    desc.textContent = m.description || "";
+    text.append(name, ver, desc);
+    card.append(iconBox(m.icon), text);
+    grid.appendChild(card);
+  });
+  renderOptional();
+}
+
+function renderOptional() {
+  const data = state.mods, box = $("optional-list");
+  box.innerHTML = "";
+  if (!data.optional.length) {
+    const e = document.createElement("p");
+    e.className = "muted small";
+    e.textContent = "Aucun mod optionnel proposé pour l'instant.";
+    box.appendChild(e);
+    return;
+  }
+  const choices = state.info.settings.optional || {};
+  const isOn = (o) => (o.id in choices ? choices[o.id] : o.default);
+  data.optional.forEach((o) => {
+    const row = document.createElement("label");
+    const available = !!o.file;
+    const on = available && (isOn(o) || data.optional.some((x) => isOn(x) && (x.requires || []).includes(o.id)));
+    row.className = "opt" + (on ? " on" : "") + (available ? "" : " off");
+    const text = document.createElement("div");
+    text.className = "mod-text";
+    const name = document.createElement("div");
+    name.className = "mod-name";
+    name.textContent = o.name;
+    const desc = document.createElement("span");
+    desc.className = "mod-desc";
+    const req = (o.requires || []).map((r) => (data.optional.find((x) => x.id === r) || { name: r }).name);
+    desc.textContent = !available ? o.error || "Indisponible" : (req.length ? `Nécessite ${req.join(", ")} · ` : "") + (o.description || "");
+    text.append(name, desc);
+    const sw = document.createElement("input");
+    sw.type = "checkbox";
+    sw.className = "switch";
+    sw.checked = on;
+    sw.disabled = !available;
+    sw.addEventListener("change", () => setOptional(o.id, sw.checked));
+    row.append(iconBox(o.icon), text, sw);
+    box.appendChild(row);
+  });
+}
+
+function setOptional(id, on) {
+  const opt = state.mods.optional;
+  const choices = Object.assign({}, state.info.settings.optional || {});
+  choices[id] = on;
+  if (on) {
+    // Active aussi ce dont il a besoin
+    const stack = [id];
+    while (stack.length) {
+      const o = opt.find((x) => x.id === stack.pop());
+      for (const r of (o && o.requires) || []) if (!choices[r]) { choices[r] = true; stack.push(r); }
+    }
+  } else {
+    // Désactive ce qui en dépend
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const o of opt) if (choices[o.id] !== false && (o.requires || []).some((r) => choices[r] === false) && (choices[o.id] || o.default)) { choices[o.id] = false; changed = true; }
+    }
+  }
+  state.info.settings.optional = choices;
+  saveSettings();
+  renderOptional();
+  toast("C'est noté : le changement sera appliqué au prochain lancement du jeu.", 3500, "Mods optionnels");
+}
+
+$("mods-search").addEventListener("input", renderMods);
+document.querySelectorAll(".fchip").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".fchip").forEach((x) => x.classList.toggle("active", x === b));
+  state.modFilter = b.dataset.f;
+  renderMods();
+}));
+
+/* =====================================================================
+   Onglet Captures
+   ===================================================================== */
+const fileSrc = (p) => (window.__TAURI__.core.convertFileSrc ? window.__TAURI__.core.convertFileSrc(p) : p);
+async function loadShots() {
+  const shots = await invoke("list_screenshots").catch(() => []);
+  const grid = $("shots-grid");
+  grid.innerHTML = "";
+  $("shots-count").textContent = shots.length
+    ? `${shots.length} capture${shots.length > 1 ? "s" : ""} · appuie sur F2 en jeu pour en prendre`
+    : "Appuie sur F2 en jeu pour prendre une capture.";
+  if (!shots.length) {
+    const e = document.createElement("p");
+    e.className = "empty";
+    e.textContent = "Aucune capture pour l'instant.";
+    grid.appendChild(e);
+  }
+  shots.forEach((sh, i) => {
+    const b = document.createElement("button");
+    b.className = "shot";
+    b.style.animationDelay = Math.min(i, 16) * 30 + "ms";
+    const img = new Image();
+    img.loading = "lazy";
+    img.alt = sh.name;
+    img.src = fileSrc(sh.path);
+    const cap = document.createElement("span");
+    cap.textContent = new Date(sh.modified * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    b.append(img, cap);
+    b.addEventListener("click", () => openLightbox(sh));
+    grid.appendChild(b);
+  });
+}
+let lightboxShot = null;
+function openLightbox(sh) {
+  lightboxShot = sh;
+  $("lightbox-img").src = fileSrc(sh.path);
+  $("lightbox-name").textContent = sh.name;
+  $("lightbox").classList.remove("hidden");
+}
+$("lightbox-close").addEventListener("click", () => $("lightbox").classList.add("hidden"));
+$("lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") $("lightbox").classList.add("hidden"); });
+$("lightbox-open").addEventListener("click", () => lightboxShot && invoke("open_file", { path: lightboxShot.path }).catch((e) => toast(String(e))));
+
+/* =====================================================================
+   Rapport de crash
+   ===================================================================== */
+let crashText = "";
+async function showCrash(code) {
+  const info = await invoke("crash_info").catch(() => ({ text: "", source: "" }));
+  crashText = info.text || `Minecraft s'est fermé avec le code ${code}.`;
+  $("crash-source").textContent = info.source ? `(${info.source})` : "";
+  const lines = crashText.split("\n");
+  $("crash-log").textContent = lines.slice(-80).join("\n");
+  $("crash-link").classList.add("hidden");
+  $("crash-share").disabled = false;
+  $("crash-share").textContent = "Partager le rapport";
+  $("crash").classList.remove("hidden");
+  requestAnimationFrame(() => ($("crash-log").scrollTop = $("crash-log").scrollHeight));
+}
+$("crash-share").addEventListener("click", async () => {
+  $("crash-share").disabled = true;
+  $("crash-share").textContent = "Envoi…";
+  try {
+    const url = await invoke("share_crash", { text: crashText });
+    try { await navigator.clipboard.writeText(url); } catch (_) {}
+    $("crash-link").textContent = `Lien copié : ${url} (colle-le sur le Discord du serveur)`;
+    $("crash-link").classList.remove("hidden");
+    $("crash-share").textContent = "Envoyé !";
+  } catch (e) {
+    $("crash-share").disabled = false;
+    $("crash-share").textContent = "Partager le rapport";
+    toast(String(e));
+  }
+});
+$("crash-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(crashText); $("crash-copy").textContent = "Copié !"; setTimeout(() => ($("crash-copy").textContent = "Copier"), 1500); } catch (_) {}
+});
+$("crash-close").addEventListener("click", () => $("crash").classList.add("hidden"));
+
+/* =====================================================================
    Onglets & réglages
    ===================================================================== */
 function moveIndicator() {
@@ -511,7 +765,9 @@ function showView(v) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === v));
   moveIndicator();
   if (v === "news" && state.latestNews) { lsSet("nouveautes-vues", state.latestNews); $("news-dot").classList.add("hidden"); }
-  for (const name of ["home", "news", "settings"]) {
+  if (v === "mods") loadMods();
+  if (v === "shots") loadShots();
+  for (const name of ["home", "news", "mods", "shots", "settings"]) {
     const view = $("view-" + name);
     const show = name === v;
     if (show && view.classList.contains("hidden")) {
@@ -558,14 +814,23 @@ function renderRam() {
 }
 
 function saveSettings() {
-  const settings = {
+  const [w, h] = $("display-size").value.split("x").map(Number);
+  const settings = Object.assign({}, state.info.settings, {
     ram_mb: $("ram-auto").checked ? 0 : +$("ram").value,
     minimize_on_launch: $("minimize").checked,
     auto_update: $("upd-auto").checked,
-  };
+    fullscreen: $("display-mode").value === "fullscreen",
+    width: w, height: h,
+    discord_rpc: $("discord-rpc").checked,
+    optional: state.info.settings.optional || {},
+  });
   state.info.settings = settings;
+  $("display-size").disabled = settings.fullscreen;
   invoke("save_settings", { settings }).catch((e) => toast(String(e)));
 }
+$("display-mode").addEventListener("change", saveSettings);
+$("display-size").addEventListener("change", saveSettings);
+$("discord-rpc").addEventListener("change", saveSettings);
 $("ram-auto").addEventListener("change", () => { renderRam(); saveSettings(); });
 $("upd-auto").addEventListener("change", saveSettings);
 $("ram").addEventListener("input", renderRam);
@@ -654,6 +919,11 @@ $("upd-check").addEventListener("click", async () => {
   if (s.ram_mb) $("ram").value = s.ram_mb;
   $("minimize").checked = s.minimize_on_launch;
   $("upd-auto").checked = s.auto_update !== false;
+  $("display-mode").value = s.fullscreen ? "fullscreen" : "window";
+  const size = `${s.width || 0}x${s.height || 0}`;
+  $("display-size").value = [...$("display-size").options].some((o) => o.value === size) ? size : "0x0";
+  $("display-size").disabled = !!s.fullscreen;
+  $("discord-rpc").checked = s.discord_rpc !== false;
   renderRam();
   $("app-version").textContent = `Launcher v${state.info.version} · N4ssD`;
   renderAccount();

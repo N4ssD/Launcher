@@ -46,6 +46,18 @@ pub struct Settings {
     pub minimize_on_launch: bool,
     #[serde(default = "default_true")]
     pub auto_update: bool,
+    /// Mods optionnels activés (id → oui/non). Absent = valeur par défaut du pack.
+    #[serde(default)]
+    pub optional: std::collections::HashMap<String, bool>,
+    #[serde(default)]
+    pub fullscreen: bool,
+    /// Taille de la fenêtre du jeu (0 = taille par défaut de Minecraft)
+    #[serde(default)]
+    pub width: u32,
+    #[serde(default)]
+    pub height: u32,
+    #[serde(default = "default_true")]
+    pub discord_rpc: bool,
 }
 
 /// 0 = automatique (valeur conseillée selon le PC et le modpack)
@@ -58,7 +70,16 @@ fn default_true() -> bool {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { ram_mb: default_ram(), minimize_on_launch: true, auto_update: true }
+        Settings {
+            ram_mb: default_ram(),
+            minimize_on_launch: true,
+            auto_update: true,
+            optional: Default::default(),
+            fullscreen: false,
+            width: 0,
+            height: 0,
+            discord_rpc: true,
+        }
     }
 }
 
@@ -93,6 +114,15 @@ pub struct Pack {
     /// Historique des mises à jour (onglet Nouveautés)
     #[serde(default)]
     pub changelog: Vec<Release>,
+    /// Mods optionnels proposés aux joueurs (téléchargés depuis Modrinth)
+    #[serde(default)]
+    pub optional: Vec<OptionalMod>,
+    /// Liens affichés dans la barre du haut
+    #[serde(default)]
+    pub links: Links,
+    /// Identifiant de l'application Discord (statut « Joue sur … »)
+    #[serde(default)]
+    pub discord_app_id: String,
     /// RAM conseillée pour le modpack, en Mo (facultatif)
     #[serde(default)]
     pub ram: Option<u32>,
@@ -114,6 +144,40 @@ pub mod memory {
         let want = pack.map(|v| v as u64).unwrap_or(6144);
         want.min(safe_max_mb(total)).max(2048) / 512 * 512
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct Links {
+    #[serde(default)]
+    pub discord: String,
+    #[serde(default)]
+    pub site: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct OptionalMod {
+    /// Identifiant (slug) du projet sur Modrinth, ex. « xaeros-minimap »
+    pub modrinth: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// Dossier de destination : mods (défaut), shaderpacks, resourcepacks
+    #[serde(default = "default_dir")]
+    pub dir: String,
+    /// Chargeur à demander à Modrinth (défaut : neoforge ; « iris » pour les shaders)
+    #[serde(default)]
+    pub loader: String,
+    /// Activé par défaut ?
+    #[serde(default)]
+    pub default: bool,
+    /// Autres mods optionnels nécessaires (slugs)
+    #[serde(default)]
+    pub requires: Vec<String>,
+}
+
+fn default_dir() -> String {
+    "mods".into()
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

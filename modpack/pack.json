@@ -4,13 +4,18 @@
   "minecraft": "1.21.1",
   "neoforge": "latest",
   "version": "1.0",
+  "ram": 6144,
+  "links": {
+    "discord": "",
+    "site": ""
+  },
+  "discord_app_id": "",
   "news": [
     {
       "type": "info",
       "text": "Bienvenue sur le launcher du serveur !"
     }
   ],
-  "ram": 6144,
   "changelog": [
     {
       "version": "1.0",
@@ -30,6 +35,52 @@
           "text": "Connexion directe au serveur"
         }
       ]
+    }
+  ],
+  "optional": [
+    {
+      "modrinth": "xaeros-minimap",
+      "name": "Minimap",
+      "description": "Petite carte en haut de l'écran.",
+      "default": false
+    },
+    {
+      "modrinth": "xaeros-world-map",
+      "name": "Carte du monde",
+      "description": "Grande carte du monde avec la touche M.",
+      "default": false
+    },
+    {
+      "modrinth": "jade",
+      "name": "Jade",
+      "description": "Affiche le nom du bloc ou de l'entité que tu regardes.",
+      "default": true
+    },
+    {
+      "modrinth": "sodium",
+      "name": "Sodium",
+      "description": "Plus de FPS (nécessaire pour les shaders).",
+      "default": false
+    },
+    {
+      "modrinth": "iris",
+      "name": "Iris",
+      "description": "Permet d'utiliser des shaders.",
+      "requires": [
+        "sodium"
+      ],
+      "default": false
+    },
+    {
+      "modrinth": "complementary-reimagined",
+      "name": "Shaders Complementary",
+      "description": "De beaux shaders réalistes.",
+      "dir": "shaderpacks",
+      "loader": "iris",
+      "requires": [
+        "iris"
+      ],
+      "default": false
     }
   ]
 }
