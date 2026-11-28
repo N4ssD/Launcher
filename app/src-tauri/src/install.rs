@@ -121,7 +121,12 @@ pub fn library_jobs(json: &Value, libs_dir: &Path) -> Vec<Job> {
 
 /// Installe le Java fourni par Mojang (composant demandé par la version) et renvoie (java, javaw).
 pub async fn install_java(component: &str, progress: Progress, strict: bool) -> Result<(PathBuf, PathBuf)> {
-    let all: Value = get_json(JAVA_ALL).await?;
+    let root = runtime_dir().join(component);
+    let all: Value = match get_json(JAVA_ALL).await {
+        Ok(v) => v,
+        // Mojang ne répond pas : on garde le Java déjà installé s'il est là.
+        Err(e) => return java_paths(&root).ok_or(e),
+    };
     let entry = all[JAVA_PLATFORM][component]
         .get(0)
         .ok_or_else(|| anyhow!("Java « {component} » introuvable pour ce système"))?;
@@ -129,7 +134,6 @@ pub async fn install_java(component: &str, progress: Progress, strict: bool) -> 
         .as_str()
         .ok_or_else(|| anyhow!("Manifeste Java invalide"))?;
     let manifest: Value = get_json(manifest_url).await?;
-    let root = runtime_dir().join(component);
     let mut jobs = Vec::new();
     if let Some(files) = manifest["files"].as_object() {
         for (rel, f) in files {
@@ -154,25 +158,25 @@ pub async fn install_java(component: &str, progress: Progress, strict: bool) -> 
     let p = progress.clone();
     net::download_all(jobs, strict, 12, move |d, t| p(d, t)).await?;
 
+    java_paths(&root).ok_or_else(|| anyhow!("Java n'a pas pu être installé"))
+}
+
+/// (java, javaw) s'ils existent dans ce dossier.
+fn java_paths(root: &Path) -> Option<(PathBuf, PathBuf)> {
     #[cfg(windows)]
     let (java, javaw) = (root.join("bin").join("java.exe"), root.join("bin").join("javaw.exe"));
     #[cfg(not(windows))]
     let (java, javaw) = {
         use std::os::unix::fs::PermissionsExt;
-        for f in ["java"] {
-            let p = root.join("bin").join(f);
-            if let Ok(m) = std::fs::metadata(&p) {
-                let mut perm = m.permissions();
-                perm.set_mode(0o755);
-                let _ = std::fs::set_permissions(&p, perm);
-            }
+        let p = root.join("bin").join("java");
+        if let Ok(m) = std::fs::metadata(&p) {
+            let mut perm = m.permissions();
+            perm.set_mode(0o755);
+            let _ = std::fs::set_permissions(&p, perm);
         }
         (root.join("bin").join("java"), root.join("bin").join("java"))
     };
-    if !java.exists() {
-        return Err(anyhow!("Java n'a pas pu être installé"));
-    }
-    Ok((java, javaw))
+    (java.exists() && javaw.exists()).then_some((java, javaw))
 }
 
 // ---------- Minecraft vanilla ----------
@@ -253,25 +257,34 @@ pub async fn install_vanilla(mc_dir: &Path, version: &str, progress: Progress, s
 // ---------- NeoForge ----------
 
 fn version_key(v: &str) -> Vec<u64> {
-    v.split(|c: char| c == '.' || c == '-')
+    v.split(['.', '-'])
         .map(|p| p.parse::<u64>().unwrap_or(0))
         .collect()
 }
 
 /// "latest" → dernière version NeoForge stable pour cette version de Minecraft.
-pub async fn resolve_neoforge(spec: &str, mc: &str) -> Result<String> {
+pub async fn resolve_neoforge(spec: &str, mc: &str, mc_dir: &Path) -> Result<String> {
     let spec = spec.trim();
     if !spec.is_empty() && spec != "latest" && spec != "auto" {
         return Ok(spec.to_string());
     }
     let parts: Vec<&str> = mc.trim_start_matches("1.").split('.').collect();
     let prefix = format!("{}.{}.", parts[0], parts.get(1).unwrap_or(&"0"));
-    let xml = net::client()
-        .get(format!("{NEO_MAVEN}/maven-metadata.xml"))
-        .send()
-        .await?
-        .text()
-        .await?;
+    let xml = match neo_metadata().await {
+        Ok(x) => x,
+        Err(e) => {
+            // Site NeoForge injoignable : on reprend la version déjà installée la plus récente.
+            let mut local: Vec<String> = std::fs::read_dir(mc_dir.join("versions"))
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|d| d.file_name().to_str().and_then(|n| n.strip_prefix("neoforge-")).map(String::from))
+                .filter(|v| v.starts_with(&prefix))
+                .collect();
+            local.sort_by_key(|v| version_key(v));
+            return local.pop().ok_or(e);
+        }
+    };
     let mut versions: Vec<String> = xml
         .split("<version>")
         .skip(1)
@@ -287,6 +300,18 @@ pub async fn resolve_neoforge(spec: &str, mc: &str) -> Result<String> {
     versions.pop().ok_or_else(|| anyhow!("Aucune version NeoForge pour Minecraft {mc}"))
 }
 
+async fn neo_metadata() -> Result<String> {
+    let r = net::client().get(format!("{NEO_MAVEN}/maven-metadata.xml")).send().await?;
+    if !r.status().is_success() {
+        return Err(anyhow!("NeoForge a répondu {}", r.status()));
+    }
+    Ok(r.text().await?)
+}
+
+pub fn installer_path(neo: &str) -> PathBuf {
+    data_dir().join("cache").join(format!("neoforge-{neo}-installer.jar"))
+}
+
 /// Installe NeoForge avec son installeur officiel (mode client, sans fenêtre). Renvoie l'id de version.
 pub async fn install_neoforge(mc_dir: &Path, java: &Path, neo: &str) -> Result<String> {
     let id = format!("neoforge-{neo}");
@@ -300,7 +325,7 @@ pub async fn install_neoforge(mc_dir: &Path, java: &Path, neo: &str) -> Result<S
         std::fs::create_dir_all(mc_dir)?;
         std::fs::write(&profiles, r#"{"profiles":{},"version":3}"#)?;
     }
-    let installer = data_dir().join("cache").join(format!("neoforge-{neo}-installer.jar"));
+    let installer = installer_path(neo);
     if !installer.exists() {
         net::download(&Job {
             url: format!("{NEO_MAVEN}/{neo}/neoforge-{neo}-installer.jar"),
@@ -334,6 +359,8 @@ pub async fn install_neoforge(mc_dir: &Path, java: &Path, neo: &str) -> Result<S
         }
         last = format!("code {:?}", status.code());
     }
+    // L'installeur était peut-être abîmé : il sera retéléchargé au prochain essai.
+    let _ = std::fs::remove_file(&installer);
     Err(anyhow!(
         "L'installation de NeoForge {neo} a échoué ({last}). Détails : {}",
         log_path.display()

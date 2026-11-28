@@ -71,12 +71,18 @@ fn encode_segment(s: &str) -> String {
     out
 }
 
-/// Ce qu'il reste à faire : (fichiers à télécharger, fichiers à supprimer).
-pub fn plan(game_dir: &Path, m: &Manifest) -> Result<(Vec<Job>, Vec<PathBuf>, Vec<(String, String)>)> {
+/// Ce qu'il reste à faire : fichiers à télécharger, fichiers à supprimer, nouvel état.
+pub struct Plan {
+    pub jobs: Vec<Job>,
+    pub remove: Vec<PathBuf>,
+    pub state: Vec<(String, String)>,
+}
+
+pub fn plan(game_dir: &Path, m: &Manifest, keep: &HashSet<String>) -> Result<Plan> {
     let state = load_state(game_dir);
     let mut jobs = Vec::new();
     let mut new_state = Vec::new();
-    let mut wanted: HashSet<PathBuf> = HashSet::new();
+    let mut wanted: HashSet<PathBuf> = keep.iter().filter_map(|p| safe_rel(p)).map(|r| game_dir.join(r)).collect();
     for f in &m.files {
         let rel = safe_rel(&f.path).ok_or_else(|| anyhow!("Chemin refusé dans le manifeste : {}", f.path))?;
         let dest = game_dir.join(&rel);
@@ -111,35 +117,42 @@ pub fn plan(game_dir: &Path, m: &Manifest) -> Result<(Vec<Job>, Vec<PathBuf>, Ve
             }
         }
     }
-    Ok((jobs, remove, new_state))
+    Ok(Plan { jobs, remove, state: new_state })
 }
 
 pub async fn fetch_manifest() -> Result<Manifest> {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    net::get_json(&format!("{PACK_BASE_URL}manifest.json?t={t}")).await
+    net::get_json_cached(&format!("{PACK_BASE_URL}manifest.json?t={t}"), "manifest.json").await
 }
 
 fn optional_state_path(game_dir: &Path) -> PathBuf {
     game_dir.join(".launcher-optional.json")
 }
 
-pub async fn sync(game_dir: &Path, m: &Manifest, progress: crate::install::Progress) -> Result<()> {
-    std::fs::create_dir_all(game_dir.join("mods"))?;
-    // Supprime les fichiers optionnels installés avant et désactivés depuis.
-    let wanted_opt: HashSet<String> = m.files.iter().filter(|f| f.optional).map(|f| f.path.clone()).collect();
-    let before: Vec<String> = std::fs::read_to_string(optional_state_path(game_dir))
+fn optional_before(game_dir: &Path) -> HashSet<String> {
+    std::fs::read_to_string(optional_state_path(game_dir))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    for p in before.iter().filter(|p| !wanted_opt.contains(*p)) {
+        .unwrap_or_default()
+}
+
+/// `keep_optional` : Modrinth n'a pas répondu, on garde les mods optionnels déjà installés tels quels.
+pub async fn sync(game_dir: &Path, m: &Manifest, progress: crate::install::Progress, keep_optional: bool) -> Result<()> {
+    std::fs::create_dir_all(game_dir.join("mods"))?;
+    let before = optional_before(game_dir);
+    let mut wanted_opt: HashSet<String> = m.files.iter().filter(|f| f.optional).map(|f| f.path.clone()).collect();
+    let keep: HashSet<String> = if keep_optional { before.difference(&wanted_opt).cloned().collect() } else { HashSet::new() };
+    // Supprime les fichiers optionnels installés avant et désactivés depuis.
+    for p in before.iter().filter(|p| !wanted_opt.contains(*p) && !keep.contains(*p)) {
         if let Some(rel) = safe_rel(p) {
             let _ = std::fs::remove_file(game_dir.join(rel));
         }
     }
+    wanted_opt.extend(keep.iter().cloned());
     std::fs::write(optional_state_path(game_dir), serde_json::to_string(&wanted_opt.iter().collect::<Vec<_>>())?)?;
     let gd = game_dir.to_path_buf();
     let mc = m.clone();
-    let (jobs, remove, new_state) = tokio::task::spawn_blocking(move || plan(&gd, &mc)).await??;
+    let Plan { jobs, remove, state: new_state } = tokio::task::spawn_blocking(move || plan(&gd, &mc, &keep)).await??;
     for p in remove {
         let _ = std::fs::remove_file(p);
     }
@@ -152,8 +165,35 @@ pub async fn sync(game_dir: &Path, m: &Manifest, progress: crate::install::Progr
 
 /// Nombre de fichiers à mettre à jour et taille totale.
 pub fn pending(game_dir: &Path, m: &Manifest) -> (usize, u64) {
-    match plan(game_dir, m) {
-        Ok((jobs, remove, _)) => (jobs.len() + remove.len(), jobs.iter().map(|j| j.size).sum()),
+    // Les mods optionnels déjà installés ne comptent pas comme « à supprimer ».
+    match plan(game_dir, m, &optional_before(game_dir)) {
+        Ok(p) => (p.jobs.len() + p.remove.len(), p.jobs.iter().map(|j| j.size).sum()),
         Err(_) => (0, 0),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_and_removes() {
+        let dir = std::env::temp_dir().join(format!("launcher-sync-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("mods")).unwrap();
+        std::fs::write(dir.join("mods/a.jar"), b"aaa").unwrap();
+        std::fs::write(dir.join("mods/b.jar"), b"bbb").unwrap();
+        std::fs::write(dir.join("mods/c.jar"), b"ccc").unwrap();
+        let sha_a = crate::net::sha1_file(&dir.join("mods/a.jar")).unwrap();
+        let m = Manifest {
+            version: String::new(),
+            files: vec![ManifestFile { path: "mods/a.jar".into(), sha1: sha_a, size: 3, url: String::new(), info: None, optional: false }],
+        };
+        let keep: HashSet<String> = ["mods/b.jar".to_string()].into();
+        let p = plan(&dir, &m, &keep).unwrap();
+        assert!(p.jobs.is_empty(), "a.jar est déjà bon");
+        assert_eq!(p.remove, vec![dir.join("mods/c.jar")], "seul c.jar est en trop");
+        assert!(plan(&dir, &Manifest { version: String::new(), files: vec![ManifestFile { path: "../x.jar".into(), sha1: String::new(), size: 0, url: String::new(), info: None, optional: false }] }, &HashSet::new()).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

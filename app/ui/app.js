@@ -113,6 +113,7 @@ function buildMachine() {
   el("path", { d: `M${big.cx - ro},${y} H${big.cx + ro} M${big.cx - ro},${y - 8} v16 M${big.cx + ro},${y - 8} v16`, fill: "none", "stroke-width": 1 }, ann);
   el("text", { x: big.cx - 64, y: y - 8, stroke: "none" }, ann).textContent = `Ø ${Math.round(ro * 2)} · Z=${big.N}`;
   el("text", { x: cop.cx - 44, y: cop.cy + cop.R + cop.m * 2.6, stroke: "none" }, ann).textContent = `Z=${cop.N} · m${cop.m}`;
+  buildGauge(big);
   // Petits engrenages d'interface
   kin.icons = [
     { g: buildGear($("brand-gear"), 10, 7.4, "brass").g, rate: 0.6 },
@@ -120,6 +121,30 @@ function buildMachine() {
     { g: buildGear($("modal-gear"), 10, 7.4, "brass").g, rate: 2.5, fixed: true },
   ];
   buildGear($("upd-gear"), 10, 7.4, "brass");
+}
+
+/** Compteur de vitesse fixe, monté sur l'axe de la grande roue (la roue tourne autour). */
+const GAUGE_MAX = 64;
+function buildGauge(big) {
+  const c = BLUEPRINT.brass, r = 44;
+  const g = el("g", { class: "gauge", transform: `translate(${big.cx} ${big.cy})` }, $("machine"));
+  const pt = (rr, deg) => [rr * Math.cos((deg * Math.PI) / 180), rr * Math.sin((deg * Math.PI) / 180)];
+  el("circle", { r: r + 4, fill: "none", stroke: c, "stroke-width": 7, "stroke-opacity": 0.1 }, g);
+  el("circle", { r, fill: "#16140F", stroke: c, "stroke-width": 2 }, g);
+  el("circle", { r: r - 6, fill: "none", stroke: c, "stroke-width": 0.8, opacity: 0.45 }, g);
+  for (let i = 0; i <= 16; i++) {
+    const deg = 135 + (i * 270) / 16, big4 = i % 4 === 0, [x1, y1] = pt(r - 7, deg), [x2, y2] = pt(r - 7 - (big4 ? 8 : 4), deg);
+    el("line", { x1, y1, x2, y2, stroke: c, "stroke-width": big4 ? 1.8 : 1, opacity: big4 ? 1 : 0.7 }, g);
+  }
+  const [rx1, ry1] = pt(r - 3, 135 + 270 * 0.75), [rx2, ry2] = pt(r - 3, 405);
+  el("path", { class: "gauge-red", d: `M${rx1},${ry1} A${r - 3},${r - 3} 0 0,1 ${rx2},${ry2}`, fill: "none", stroke: BLUEPRINT.copper, "stroke-width": 3 }, g);
+  const needle = el("g", { class: "gauge-needle" }, g);
+  el("line", { x1: 0, y1: 8, x2: 0, y2: -(r - 13), stroke: "#FFF1CF", "stroke-width": 2.2, "stroke-linecap": "round" }, needle);
+  el("circle", { r: 4, fill: c }, g);
+  const num = el("text", { y: 22, "text-anchor": "middle", fill: c, "font-size": 13, "font-weight": 700 }, g);
+  el("text", { y: 33, "text-anchor": "middle", fill: c, "font-size": 7.5, "letter-spacing": 1, opacity: 0.7 }, g).textContent = "tr/min";
+  num.textContent = "0";
+  kin.gauge = { needle, num };
 }
 
 function setTargetRpm(rpm) { kin.target = rpm; }
@@ -147,9 +172,9 @@ function tick(t) {
   const rpm = Math.round(kin.speed);
   if (rpm !== kin.shownRpm) {
     kin.shownRpm = rpm;
-    $("rpm").textContent = rpm;
-    $("rpm-label").textContent = rpm < 16 ? "(Lente)" : rpm < 40 ? "(Moyenne)" : "(Rapide)";
+    if (kin.gauge) kin.gauge.num.textContent = rpm;
   }
+  if (kin.gauge) kin.gauge.needle.setAttribute("transform", `rotate(${(-135 + 270 * Math.min(1, kin.speed / GAUGE_MAX)).toFixed(2)})`);
   requestAnimationFrame(tick);
 }
 

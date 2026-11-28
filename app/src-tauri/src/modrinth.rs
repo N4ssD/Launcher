@@ -85,7 +85,8 @@ pub async fn resolve(items: &[OptionalMod], mc: &str) -> Vec<Resolved> {
         let games = serde_json::to_string(&[mc]).unwrap();
         match get(&format!("{API}/project/{}/version", o.modrinth), &[("loaders", loaders), ("game_versions", games)]).await {
             Ok(Value::Array(vs)) if !vs.is_empty() => {
-                let v = &vs[0];
+                // Version stable la plus récente (sinon la plus récente tout court)
+                let v = vs.iter().find(|v| v["version_type"].as_str() == Some("release")).unwrap_or(&vs[0]);
                 let files = v["files"].as_array().cloned().unwrap_or_default();
                 let f = files.iter().find(|f| f["primary"].as_bool() == Some(true)).or(files.first());
                 if let Some(f) = f {

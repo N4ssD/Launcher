@@ -31,7 +31,23 @@ pub async fn get_json<T: DeserializeOwned>(url: &str) -> Result<T> {
     if !r.status().is_success() {
         return Err(anyhow!("{url} a répondu {}", r.status()));
     }
-    Ok(r.json::<T>().await.with_context(|| format!("Réponse illisible de {url}"))?)
+    r.json::<T>().await.with_context(|| format!("Réponse illisible de {url}"))
+}
+
+/// Comme get_json, mais garde une copie locale : si le site ne répond pas, on reprend la dernière copie.
+pub async fn get_json_cached<T: DeserializeOwned>(url: &str, cache_name: &str) -> Result<T> {
+    let cache = crate::config::data_dir().join("cache").join(cache_name);
+    match get_json::<serde_json::Value>(url).await {
+        Ok(v) => {
+            let _ = std::fs::create_dir_all(cache.parent().unwrap());
+            let _ = std::fs::write(&cache, serde_json::to_string(&v).unwrap_or_default());
+            Ok(serde_json::from_value(v)?)
+        }
+        Err(e) => match std::fs::read_to_string(&cache).ok().and_then(|s| serde_json::from_str::<T>(&s).ok()) {
+            Some(v) => Ok(v),
+            None => Err(e),
+        },
+    }
 }
 
 pub fn sha1_file(path: &Path) -> Result<String> {
@@ -72,7 +88,10 @@ pub async fn download(job: &Job) -> Result<()> {
     if let Some(parent) = job.path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
-    let tmp = job.path.with_extension("part");
+    // « java.exe » et « java.dll » doivent avoir chacun leur fichier temporaire (téléchargés en même temps).
+    let mut tmp_name = job.path.file_name().unwrap_or_default().to_os_string();
+    tmp_name.push(".part");
+    let tmp = job.path.with_file_name(tmp_name);
     let mut last_err = anyhow!("échec");
     for attempt in 0..3 {
         if attempt > 0 {

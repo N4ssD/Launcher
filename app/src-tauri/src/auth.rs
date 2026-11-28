@@ -156,7 +156,7 @@ pub async fn poll_device(dc: &DeviceCode) -> Result<Account> {
             return Err(anyhow!("Le code a expiré. Recommence la connexion."));
         }
         tokio::time::sleep(Duration::from_secs(interval)).await;
-        let v: Value = client()
+        let resp = client()
             .post(TOKEN_URL)
             .form(&[
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
@@ -164,9 +164,10 @@ pub async fn poll_device(dc: &DeviceCode) -> Result<Account> {
                 ("device_code", dc.device_code.as_str()),
             ])
             .send()
-            .await?
-            .json()
-            .await?;
+            .await;
+        // Coupure réseau passagère : on réessaie au tour suivant au lieu d'abandonner.
+        let Ok(resp) = resp else { continue };
+        let Ok(v) = resp.json::<Value>().await else { continue };
         match v.get("error").and_then(|e| e.as_str()) {
             None => {
                 let access = str_field(&v, "access_token")?;

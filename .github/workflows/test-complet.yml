@@ -1,0 +1,56 @@
+name: Test complet (installation et démarrage du jeu)
+
+# Installe Java, Minecraft, NeoForge et le modpack comme un vrai joueur, puis démarre le jeu
+# sur une machine GitHub (sans écran) et vérifie qu'il se charge.
+on:
+  workflow_dispatch:
+    inputs:
+      tous_les_optionnels:
+        description: "Activer aussi tous les mods optionnels"
+        type: boolean
+        default: false
+  push:
+    branches: [test-complet]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Dépendances système
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev \
+            xvfb libgl1-mesa-dri libglx-mesa0 libxrandr2 libxcursor1 libxi6 libxxf86vm1 libxtst6
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Tests rapides
+        working-directory: app/src-tauri
+        run: cargo test
+
+      - name: Installation et démarrage du jeu
+        working-directory: app/src-tauri
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          TOUS_LES_OPTIONNELS: ${{ inputs.tous_les_optionnels && '1' || '' }}
+        run: |
+          if [ -z "$TOUS_LES_OPTIONNELS" ]; then unset TOUS_LES_OPTIONNELS; fi
+          xvfb-run -a -s "-screen 0 1280x720x24" cargo test -- --ignored --nocapture test_complet
+
+      - name: Journaux
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journaux
+          path: |
+            ~/.local/share/N4ssD-Launcher/logs/
+            ~/.local/share/N4ssD-Launcher/jeu/crash-reports/
+          if-no-files-found: ignore

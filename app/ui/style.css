@@ -92,13 +92,6 @@ button:disabled { cursor: default; }
 .machine { position: absolute; width: 700px; height: 660px; right: -130px; top: 50%; margin-top: -330px; opacity: 0; animation: machineIn 1.1s var(--ease) .15s forwards; }
 @keyframes machineIn { from { opacity: 0; transform: translateX(60px) rotate(-4deg); } to { opacity: 1; transform: none; } }
 
-.goggles { position: absolute; top: 26px; right: 46px; z-index: 3; display: flex; flex-direction: column; gap: 3px; padding: 8px 12px 9px;
-  background: rgba(16,0,16,.92); border: 2px solid; border-image: linear-gradient(180deg, #5000FF, #28007F) 1; font-family: var(--mono); font-size: 12px;
-  opacity: 0; animation: rise .6s var(--ease) 1s forwards; }
-.goggles .g-title { color: #FFE066; }
-.goggles .g-line { color: #E8E8E8; }
-.goggles b { color: #FFFFFF; font-weight: 600; }
-.goggles i { font-style: normal; color: #7CC4FF; }
 
 .hero-fade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(27,26,24,.85) 0%, rgba(27,26,24,.35) 45%, transparent 70%), linear-gradient(0deg, rgba(27,26,24,.7), transparent 45%); pointer-events: none; }
 .hero-text { position: relative; z-index: 2; padding: 0 48px; display: flex; flex-direction: column; gap: 14px; max-width: 620px; }
@@ -265,7 +258,7 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.15) rotate(4
 
 @media (max-width: 1080px) {
   h1.title { font-size: 62px; }
-  .machine { right: -200px; }
+  .machine { right: -175px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -442,7 +435,6 @@ input[type=range]:disabled { opacity: .55; cursor: default; }
 .event-when.live { background: rgba(224,106,90,.18); color: #FF8A7A; animation: blink 1.4s ease-in-out infinite; }
 .event-text strong { font-size: 15px; }
 .event-text .muted { font-size: 13px; line-height: 1.4; }
-.event:not(.hidden) ~ .goggles { }
 
 /* ---------- Réglages : son ---------- */
 .vol { display: flex; align-items: center; gap: 12px; color: var(--muted); }
@@ -495,7 +487,6 @@ h1.title { background: linear-gradient(110deg, #FFF8EA 0%, #D8CBB4 38%, #FFFFFF 
 .play:not(:disabled):hover { animation: none; }
 
 /* Les lunettes flottent un peu */
-.goggles { animation: rise .6s var(--ease) 1s forwards, float 6s ease-in-out 1.7s infinite; }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 
 /* Les panneaux du bas se soulèvent au survol */
@@ -633,3 +624,8 @@ body.splashing .app *, body.splashing .app, body.splashing .bgimg, body.splashin
 
 #theme, #daytime { width: 130px; }
 #season { width: 170px; }
+
+/* Compteur de vitesse monté sur l'axe de la grande roue */
+.gauge text { font-family: var(--mono); }
+.gauge .gauge-needle { transition: none; }
+.hero.spinning .gauge .gauge-red { animation: blink 1.6s ease-in-out infinite; }

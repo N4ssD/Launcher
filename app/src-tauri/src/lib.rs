@@ -42,7 +42,7 @@ fn progress(app: &AppHandle, stage: &'static str, label: &'static str) -> instal
     let app = app.clone();
     let last = Arc::new(AtomicI64::new(-1));
     Arc::new(move |done: usize, total: usize| {
-        let pct = if total == 0 { 100 } else { (done * 100 / total) as i64 };
+        let pct = (done * 100).checked_div(total).unwrap_or(100) as i64;
         if last.swap(pct, Ordering::SeqCst) != pct {
             emit(&app, stage, label, pct as f64 / 100.0);
         }
@@ -83,7 +83,7 @@ fn get_info() -> Info {
 
 async fn fetch_pack() -> anyhow::Result<Pack> {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
-    net::get_json(&format!("{PACK_BASE_URL}pack.json?t={t}")).await
+    net::get_json_cached(&format!("{PACK_BASE_URL}pack.json?t={t}"), "pack.json").await
 }
 
 #[derive(Serialize)]
@@ -195,9 +195,11 @@ async fn prepare(app: &AppHandle, settings: &Settings, strict: bool) -> anyhow::
     let pack = fetch_pack().await?;
     let mut manifest = sync::fetch_manifest().await?;
     let opt = modrinth::resolve(&pack.optional, &pack.minecraft).await;
+    let mut opt_failed = false;
     for id in modrinth::enabled(&opt, &settings.optional) {
-        if let Some(f) = opt.iter().find(|r| r.id == id).and_then(|r| r.file.clone()) {
-            manifest.files.push(f);
+        match opt.iter().find(|r| r.id == id).and_then(|r| r.file.clone()) {
+            Some(f) => manifest.files.push(f),
+            None => opt_failed = true,
         }
     }
     let mc_dir = config::mc_dir();
@@ -208,9 +210,10 @@ async fn prepare(app: &AppHandle, settings: &Settings, strict: bool) -> anyhow::
     let (java, javaw) = install::install_java(&component, progress(app, "java", "Installation de Java"), strict).await?;
 
     emit(app, "neoforge", "Installation de NeoForge", -1.0);
-    let neo = install::resolve_neoforge(&pack.neoforge, &pack.minecraft).await?;
+    let neo = install::resolve_neoforge(&pack.neoforge, &pack.minecraft, &mc_dir).await?;
     if strict {
         let _ = std::fs::remove_dir_all(mc_dir.join("versions").join(format!("neoforge-{neo}")));
+        let _ = std::fs::remove_file(install::installer_path(&neo));
     }
     let id = install::install_neoforge(&mc_dir, &java, &neo).await?;
     let merged = launch::merged_version(&mc_dir, &id)?;
@@ -221,7 +224,7 @@ async fn prepare(app: &AppHandle, settings: &Settings, strict: bool) -> anyhow::
     if strict {
         let _ = std::fs::remove_file(game_dir.join(".launcher-sync.json"));
     }
-    sync::sync(&game_dir, &manifest, progress(app, "mods", "Mise à jour des mods")).await?;
+    sync::sync(&game_dir, &manifest, progress(app, "mods", "Mise à jour des mods"), opt_failed).await?;
     Ok(Prepared { pack, javaw, version_id: id })
 }
 
@@ -241,10 +244,14 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
         javaw: &javaw,
         version_id: &version_id,
         account: &acc,
-        ram_mb: if settings.ram_mb == 0 {
-            memory::recommended_mb(memory::total_mb(), pack.ram) as u32
-        } else {
-            settings.ram_mb
+        ram_mb: {
+            let total = memory::total_mb();
+            if settings.ram_mb == 0 {
+                memory::recommended_mb(total, pack.ram) as u32
+            } else {
+                // Réglage venu d'un autre PC : jamais plus que ce que celui-ci peut donner.
+                settings.ram_mb.clamp(1024, memory::safe_max_mb(total).max(2048) as u32)
+            }
         },
         server: &pack.address,
         fullscreen: settings.fullscreen,
@@ -385,16 +392,18 @@ fn list_screenshots() -> Vec<Shot> {
                 .unwrap_or(0),
         })
         .collect();
-    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out.sort_by_key(|s| std::cmp::Reverse(s.modified));
     out.truncate(120);
     out
 }
 
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
-    let p = std::path::PathBuf::from(&path);
-    let shots = config::game_dir().join("screenshots");
-    if !p.starts_with(&shots) || !p.exists() {
+    // Chemin réel (sans « .. ») : seules les captures d'écran peuvent être ouvertes.
+    let (Ok(p), Ok(shots)) = (std::fs::canonicalize(&path), std::fs::canonicalize(config::game_dir().join("screenshots"))) else {
+        return Err("Fichier refusé".into());
+    };
+    if !p.starts_with(&shots) || !p.is_file() {
         return Err("Fichier refusé".into());
     }
     open::that_detached(p).map_err(|e| e.to_string())
@@ -554,4 +563,110 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage du launcher");
+}
+
+/// Essai grandeur nature (lancé sur GitHub, pas sur les PC des joueurs) :
+/// installe Java, Minecraft, NeoForge et le modpack comme un vrai joueur, puis démarre le jeu
+/// et vérifie qu'il se charge. `cargo test -- --ignored test_complet`
+#[cfg(test)]
+mod test_complet {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn test_complet() {
+        let t0 = Instant::now();
+        let step = |s: &str| println!("[{:>4}s] {s}", t0.elapsed().as_secs());
+        let noop: install::Progress = Arc::new(|_, _| {});
+
+        step("Lecture du pack.json et du manifest.json sur GitHub");
+        let pack = fetch_pack().await.expect("pack.json");
+        let mut manifest = sync::fetch_manifest().await.expect("manifest.json");
+        step(&format!("Minecraft {} · NeoForge « {} » · {} fichiers dans le modpack", pack.minecraft, pack.neoforge, manifest.files.len()));
+
+        step("Mods optionnels (Modrinth)");
+        let opt = modrinth::resolve(&pack.optional, &pack.minecraft).await;
+        for r in &opt {
+            println!("        {:<28} {:<14} {}", r.id, r.version, r.error.clone().unwrap_or_else(|| r.file.as_ref().map(|f| f.path.clone()).unwrap_or_default()));
+        }
+        let all = std::env::var("TOUS_LES_OPTIONNELS").is_ok();
+        let on = if all { opt.iter().map(|r| r.id.clone()).collect() } else { modrinth::enabled(&opt, &Default::default()) };
+        step(&format!("Optionnels activés : {on:?}"));
+        for id in &on {
+            if let Some(f) = opt.iter().find(|r| &r.id == id).and_then(|r| r.file.clone()) {
+                manifest.files.push(f);
+            }
+        }
+
+        let mc_dir = config::mc_dir();
+        let game_dir = config::game_dir();
+        step("Installation de Minecraft");
+        let vjson = install::install_vanilla(&mc_dir, &pack.minecraft, noop.clone(), false).await.expect("Minecraft");
+        let component = vjson["javaVersion"]["component"].as_str().unwrap_or("java-runtime-delta").to_string();
+        step(&format!("Installation de Java ({component})"));
+        let (java, javaw) = install::install_java(&component, noop.clone(), false).await.expect("Java");
+        step("Installation de NeoForge");
+        let neo = install::resolve_neoforge(&pack.neoforge, &pack.minecraft, &mc_dir).await.expect("version NeoForge");
+        step(&format!("NeoForge {neo}"));
+        let id = install::install_neoforge(&mc_dir, &java, &neo).await.expect("installeur NeoForge");
+        let merged = launch::merged_version(&mc_dir, &id).expect("version fusionnée");
+        net::download_all(install::library_jobs(&merged, &mc_dir.join("libraries")), false, 12, |_, _| {}).await.expect("bibliothèques");
+        step("Synchronisation du modpack");
+        sync::sync(&game_dir, &manifest, noop.clone(), false).await.expect("mods");
+        let (left, _) = sync::pending(&game_dir, &sync::fetch_manifest().await.unwrap());
+        assert_eq!(left, 0, "après la synchro, plus rien ne devrait rester à mettre à jour");
+
+        step("Deuxième préparation (tout est déjà là, doit être rapide)");
+        let t1 = Instant::now();
+        install::install_vanilla(&mc_dir, &pack.minecraft, noop.clone(), false).await.unwrap();
+        install::install_java(&component, noop.clone(), false).await.unwrap();
+        sync::sync(&game_dir, &manifest, noop.clone(), false).await.unwrap();
+        step(&format!("        {:.1} s", t1.elapsed().as_secs_f64()));
+
+        step("Démarrage du jeu (compte de test, sans serveur)");
+        let acc = auth::Account {
+            name: "Testeur".into(),
+            uuid: "0123456789abcdef0123456789abcdef".into(),
+            access_token: "0".into(),
+            expires_at: 0,
+            refresh_token: String::new(),
+            xuid: "0".into(),
+        };
+        let mut child = launch::launch(launch::LaunchOptions {
+            mc_dir: &mc_dir,
+            game_dir: &game_dir,
+            javaw: &javaw,
+            version_id: &id,
+            account: &acc,
+            ram_mb: 3072,
+            server: "",
+            fullscreen: false,
+            width: 854,
+            height: 480,
+            optimized_java: true,
+        })
+        .expect("lancement");
+        let log_path = config::data_dir().join("logs").join("jeu.log");
+        let deadline = Instant::now() + Duration::from_secs(420);
+        let ok = loop {
+            let log = std::fs::read_to_string(&log_path).unwrap_or_default();
+            if log.contains("Created:") && log.contains("-atlas") {
+                break true;
+            }
+            if let Some(code) = child.try_wait().unwrap() {
+                println!("{}", tail(&log, 120));
+                panic!("Le jeu s'est arrêté pendant le chargement ({code})");
+            }
+            if Instant::now() > deadline {
+                break false;
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        };
+        let log = std::fs::read_to_string(&log_path).unwrap_or_default();
+        let _ = child.kill();
+        println!("----- fin du journal du jeu -----\n{}", tail(&log, 60));
+        assert!(ok, "Le jeu n'a pas fini de charger à temps");
+        step("Le jeu a démarré et chargé ses ressources avec NeoForge et les mods");
+    }
 }

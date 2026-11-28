@@ -57,10 +57,42 @@ pub async fn ping(address: &str) -> ServerStatus {
     }
 }
 
+/// Adresse sans port (ex. « play.serveur.fr ») : Minecraft regarde d'abord l'enregistrement DNS
+/// `_minecraft._tcp` (SRV) qui donne la vraie machine et le vrai port. On fait pareil (DNS sur HTTPS).
+async fn resolve_srv(host: &str) -> Option<(String, u16)> {
+    if host.parse::<std::net::IpAddr>().is_ok() || !host.contains('.') {
+        return None;
+    }
+    let r = crate::net::client()
+        .get("https://cloudflare-dns.com/dns-query")
+        .query(&[("name", format!("_minecraft._tcp.{host}")), ("type", "SRV".into())])
+        .header("accept", "application/dns-json")
+        .timeout(Duration::from_secs(2))
+        .send()
+        .await
+        .ok()?;
+    let v: Value = r.json().await.ok()?;
+    let data = v["Answer"].as_array()?.iter().find(|a| a["type"].as_u64() == Some(33))?["data"].as_str()?.to_string();
+    parse_srv(&data)
+}
+
+/// « 0 5 25570 mc.exemple.fr. » → ("mc.exemple.fr", 25570)
+fn parse_srv(data: &str) -> Option<(String, u16)> {
+    let p: Vec<&str> = data.split_whitespace().collect();
+    let port = p.get(2)?.parse().ok()?;
+    let target = p.get(3)?.trim_end_matches('.').to_string();
+    (!target.is_empty()).then_some((target, port))
+}
+
 async fn ping_inner(address: &str) -> Result<ServerStatus> {
     let (host, port) = crate::launch::split_address(address);
+    let explicit_port = address.trim().rsplit_once(':').map(|(_, p)| p.parse::<u16>().is_ok()).unwrap_or(false);
+    let (conn_host, conn_port) = match if explicit_port { None } else { resolve_srv(&host).await } {
+        Some(t) => t,
+        None => (host.clone(), port),
+    };
     let start = Instant::now();
-    let mut s = TcpStream::connect((host.as_str(), port)).await?;
+    let mut s = TcpStream::connect((conn_host.as_str(), conn_port)).await?;
     let ping_ms = start.elapsed().as_millis() as u64;
 
     let mut pkt = Vec::new();
@@ -102,4 +134,13 @@ async fn ping_inner(address: &str) -> Result<ServerStatus> {
             })
             .unwrap_or_default(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn srv() {
+        assert_eq!(super::parse_srv("0 5 25570 mc.exemple.fr."), Some(("mc.exemple.fr".into(), 25570)));
+        assert_eq!(super::parse_srv("garbage"), None);
+    }
 }

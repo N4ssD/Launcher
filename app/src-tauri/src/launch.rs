@@ -237,5 +237,5 @@ pub fn launch(o: LaunchOptions) -> Result<Child> {
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
     crate::install::hide_window(&mut cmd);
-    Ok(cmd.spawn().map_err(|e| anyhow!("Impossible de lancer Minecraft : {e}"))?)
+    cmd.spawn().map_err(|e| anyhow!("Impossible de lancer Minecraft : {e}"))
 }
