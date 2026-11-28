@@ -53,10 +53,39 @@ function buildGear(parent, N, m, matName) {
   return { g, N, R };
 }
 
+/** Style « plan technique lumineux » : contours qui brillent, cercle primitif en pointillés, axes. */
+const BLUEPRINT = { brass: "#F2C35B", copper: "#F08A55", andesite: "#CFC8BA" };
+function buildGearD(parent, N, m, matName) {
+  const c = BLUEPRINT[matName] || BLUEPRINT.brass;
+  const g = el("g", {}, parent);
+  const R = (m * N) / 2, ro = R + m * 0.95, ri = R - m * 1.15, s = (2 * Math.PI) / N;
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    const a = i * s;
+    for (const [r, o] of [[ri, -0.29], [ro, -0.16], [ro, 0.16], [ri, 0.29]]) {
+      pts.push(`${(r * Math.cos(a + o * s)).toFixed(2)},${(r * Math.sin(a + o * s)).toFixed(2)}`);
+    }
+  }
+  const d = "M" + pts.join(" L") + " Z";
+  const hub = Math.max(m * 1.5, R * 0.24);
+  el("path", { d, fill: "rgba(233,180,76,.05)" }, g);
+  // Halo lumineux (traits larges et transparents : léger et fluide, pas de flou à recalculer)
+  const glow = el("g", { class: "g-glow", fill: "none", stroke: c, "stroke-linejoin": "round" }, g);
+  el("path", { d, "stroke-width": 9, "stroke-opacity": 0.07 }, glow);
+  el("path", { d, "stroke-width": 5, "stroke-opacity": 0.16 }, glow);
+  el("path", { d, fill: "none", stroke: c, "stroke-width": 2.2, "stroke-linejoin": "round" }, g);
+  el("circle", { r: R, fill: "none", stroke: c, "stroke-width": 1, "stroke-dasharray": "10 6", opacity: 0.55 }, g);
+  el("circle", { r: ri - m * 0.6, fill: "none", stroke: c, "stroke-width": 1.4, opacity: 0.75 }, g);
+  el("circle", { r: hub, fill: "none", stroke: c, "stroke-width": 2 }, g);
+  el("path", { d: `M${-ro - 14},0 H${ro + 14} M0,${-ro - 14} V${ro + 14}`, stroke: c, "stroke-width": 0.8, opacity: 0.4, "stroke-dasharray": "18 5 3 5" }, g);
+  el("rect", { x: -hub * 0.3, y: -hub * 0.3, width: hub * 0.6, height: hub * 0.6, fill: "none", stroke: c, "stroke-width": 1.6 }, g);
+  return { g, N, R };
+}
+
 const kin = { speed: 0, target: 4, angle: 0, last: 0, gears: [], shownRpm: -1 };
 
 function addGear(parent, N, m, mat, cx, cy, phase, rate) {
-  const gear = buildGear(parent, N, m, mat);
+  const gear = buildGearD(parent, N, m, mat);
   Object.assign(gear, { cx, cy, phase, rate, m });
   kin.gears.push(gear);
   return gear;
@@ -78,6 +107,12 @@ function buildMachine() {
   const and = meshWith(root, big, 10, "andesite", -136);
   meshWith(root, and, 8, "copper", 196);
   meshWith(root, cop, 9, "andesite", 100);
+  // Cotes du plan (fixes)
+  const ann = el("g", { class: "g-annot", stroke: BLUEPRINT.brass, fill: BLUEPRINT.brass, "font-family": "Cascadia Mono, Consolas, monospace", "font-size": 13 }, $("machine"));
+  const ro = big.R + big.m * 0.95, y = big.cy + ro + 26;
+  el("path", { d: `M${big.cx - ro},${y} H${big.cx + ro} M${big.cx - ro},${y - 8} v16 M${big.cx + ro},${y - 8} v16`, fill: "none", "stroke-width": 1 }, ann);
+  el("text", { x: big.cx - 64, y: y - 8, stroke: "none" }, ann).textContent = `Ø ${Math.round(ro * 2)} · Z=${big.N}`;
+  el("text", { x: cop.cx - 44, y: cop.cy + cop.R + cop.m * 2.6, stroke: "none" }, ann).textContent = `Z=${cop.N} · m${cop.m}`;
   // Petits engrenages d'interface
   kin.icons = [
     { g: buildGear($("brand-gear"), 10, 7.4, "brass").g, rate: 0.6 },
@@ -224,6 +259,7 @@ function renderPlay() {
   const acc = state.info && state.info.account;
   const btn = $("play");
   btn.classList.toggle("ingame", state.phase === "ingame");
+  $("hero").classList.toggle("spinning", state.phase === "busy");
   if (state.phase === "busy") {
     btn.disabled = true;
     $("play-label").textContent = "Patiente";
