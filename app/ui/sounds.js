@@ -194,6 +194,11 @@ const sfx = (() => {
       if (!ensure()) return;
       if (ctx.state === "running") startMusic(); else { ctx.resume().then(() => ctx.state === "running" && startMusic()).catch(() => {}); unlockLater(() => musicWanted && startMusic()); }
     },
+    /** Prépare le moteur audio et le son d'ouverture à l'avance, pour ne rien calculer pendant l'animation. */
+    warm() {
+      if (!ensure()) return;
+      [NOTE.D3, NOTE.A3, NOTE.D4, NOTE.F4, NOTE.A4, NOTE.E5].forEach((f) => pluckBuffer(f, false));
+    },
     /** Petit son d'ouverture : accord de harpe + cloche. */
     startup() {
       if (sfxVol <= 0 || !ensure()) return;

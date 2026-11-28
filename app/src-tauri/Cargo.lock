@@ -1956,7 +1956,7 @@ dependencies = [
 
 [[package]]
 name = "launcher"
-version = "1.7.0"
+version = "1.8.0"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",

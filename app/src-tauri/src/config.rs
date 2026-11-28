@@ -69,6 +69,24 @@ pub struct Settings {
     /// Arguments Java optimisés (G1GC)
     #[serde(default = "default_true")]
     pub optimized_java: bool,
+    /// Derniers votes (site → horodatage en secondes)
+    #[serde(default)]
+    pub votes: std::collections::HashMap<String, u64>,
+    /// Version du règlement acceptée par le joueur
+    #[serde(default)]
+    pub rules_accepted: String,
+    /// Visite guidée déjà vue
+    #[serde(default)]
+    pub tour_done: bool,
+    /// Thème de couleur : laiton, cuivre, nuit, emeraude
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    /// Ambiance de saison : auto, hiver, automne, halloween, printemps, ete
+    #[serde(default = "default_auto")]
+    pub season: String,
+    /// Moment de la journée : auto, matin, jour, soir, nuit
+    #[serde(default = "default_auto")]
+    pub daytime: String,
     /// Langue de l'interface : fr ou en
     #[serde(default = "default_lang")]
     pub lang: String,
@@ -79,6 +97,12 @@ fn default_volume() -> u32 {
 }
 fn default_music() -> u32 {
     25
+}
+fn default_theme() -> String {
+    "laiton".into()
+}
+fn default_auto() -> String {
+    "auto".into()
 }
 fn default_lang() -> String {
     "fr".into()
@@ -108,6 +132,12 @@ impl Default for Settings {
             music_volume: default_music(),
             optimized_java: true,
             lang: default_lang(),
+            votes: Default::default(),
+            rules_accepted: String::new(),
+            tour_done: false,
+            theme: default_theme(),
+            season: default_auto(),
+            daytime: default_auto(),
         }
     }
 }
@@ -152,6 +182,12 @@ pub struct Pack {
     /// Identifiant de l'application Discord (statut « Joue sur … »)
     #[serde(default)]
     pub discord_app_id: String,
+    /// Sites de vote (rappel quand on peut revoter)
+    #[serde(default)]
+    pub vote: Vec<VoteSite>,
+    /// Règlement à accepter au premier lancement (facultatif)
+    #[serde(default)]
+    pub rules: Option<Rules>,
     /// Événement affiché sur l'accueil (facultatif)
     #[serde(default)]
     pub event: Option<Event>,
@@ -176,6 +212,30 @@ pub mod memory {
         let want = pack.map(|v| v as u64).unwrap_or(6144);
         want.min(safe_max_mb(total)).max(2048) / 512 * 512
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct VoteSite {
+    pub name: String,
+    pub url: String,
+    /// Délai entre deux votes, en heures (24 par défaut)
+    #[serde(default = "default_cooldown")]
+    pub cooldown_hours: u32,
+}
+
+fn default_cooldown() -> u32 {
+    24
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Rules {
+    /// Changer ce numéro redemande l'accord de tous les joueurs
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub items: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

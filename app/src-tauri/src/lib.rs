@@ -5,6 +5,7 @@ mod launch;
 mod modrinth;
 mod net;
 mod presence;
+mod stats;
 mod status;
 mod sync;
 
@@ -19,6 +20,8 @@ use tauri_plugin_updater::UpdaterExt;
 #[derive(Default)]
 struct AppState {
     busy: AtomicBool,
+    /// Décalage horaire local en minutes (envoyé par l'interface), pour compter les jours joués
+    tz_offset_min: std::sync::atomic::AtomicI64,
     /// Mise à jour téléchargée, prête à être installée
     pending_update: std::sync::Mutex<Option<(tauri_plugin_updater::Update, Vec<u8>)>>,
 }
@@ -266,8 +269,11 @@ async fn run_play(app: &AppHandle) -> anyhow::Result<()> {
         }
     }
     let app2 = app.clone();
+    let started = std::time::Instant::now();
+    let tz = app.state::<AppState>().tz_offset_min.load(Ordering::SeqCst);
     std::thread::spawn(move || {
         let code = child.wait().ok().and_then(|s| s.code());
+        stats::add_session(started.elapsed().as_secs(), tz);
         presence::send(presence::Msg::Clear);
         let _ = app2.emit("game-exit", code);
         if let Some(w) = app2.get_webview_window("main") {
@@ -292,6 +298,14 @@ fn repair(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
         }
     });
     Ok(())
+}
+
+// ---------- Temps de jeu ----------
+
+#[tauri::command]
+fn get_stats(state: State<'_, AppState>, tz_offset_min: i64) -> stats::Stats {
+    state.tz_offset_min.store(tz_offset_min, Ordering::SeqCst);
+    stats::load()
 }
 
 // ---------- Comptes ----------
@@ -535,7 +549,8 @@ pub fn run() {
             repair,
             list_accounts,
             switch_account,
-            remove_account
+            remove_account,
+            get_stats
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage du launcher");

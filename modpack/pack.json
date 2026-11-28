@@ -10,6 +10,19 @@
     "site": ""
   },
   "discord_app_id": "",
+  "vote": [],
+  "rules": {
+    "version": "1",
+    "title": "Règlement du serveur",
+    "items": [
+      "Respecte tous les joueurs : pas d'insultes, de harcèlement ni de propos discriminatoires.",
+      "Aucun cheat, x-ray, client modifié ou exploit de bug. Signale les bugs au staff.",
+      "Pas de vol ni de destruction (grief) dans les bases des autres joueurs.",
+      "Pas de machines Create conçues pour faire laguer le serveur.",
+      "Pas de pub pour d'autres serveurs.",
+      "Les décisions du staff s'appliquent à tous. En cas de souci, ouvre un ticket sur le Discord."
+    ]
+  },
   "news": [
     {
       "type": "info",

@@ -57,7 +57,7 @@ function buildGear(parent, N, m, matName) {
 const BLUEPRINT = { brass: "#F2C35B", copper: "#F08A55", andesite: "#CFC8BA" };
 function buildGearD(parent, N, m, matName) {
   const c = BLUEPRINT[matName] || BLUEPRINT.brass;
-  const g = el("g", {}, parent);
+  const g = el("g", { class: "gm-" + matName }, parent);
   const R = (m * N) / 2, ro = R + m * 0.95, ri = R - m * 1.15, s = (2 * Math.PI) / N;
   const pts = [];
   for (let i = 0; i < N; i++) {
@@ -294,6 +294,7 @@ async function loadPack() {
     state.pending = r.pending_files;
     const p = r.pack;
     document.title = p.name;
+    lsSet("nom-serveur", p.name);
     $("brand-name").textContent = p.name;
     $("hero-name").textContent = p.name;
     $("chip-mc").textContent = `NEOFORGE ${p.minecraft}`;
@@ -331,6 +332,8 @@ async function loadPack() {
       }
     }
     renderRam();
+    checkVoteReminders(!state.votesChecked); state.votesChecked = true;
+    firstRunFlow();
     refreshServer();
     clearInterval(state.statusTimer);
     state.statusTimer = setInterval(refreshServer, 30000);
@@ -379,6 +382,7 @@ $("link-site").addEventListener("click", () => state.pack && invoke("open_url", 
    ===================================================================== */
 $("play").addEventListener("click", async () => {
   sfx.click();
+  if (state.pack && rulesPending()) return openRules(true);
   if (!state.info.account) return openLogin();
   sfx.ratchet();
   state.phase = "busy";
@@ -430,6 +434,7 @@ listen("launched", () => {
 
 listen("game-exit", ({ payload }) => {
   backToIdle();
+  setTimeout(loadStats, 800);
   if ($("music-on").checked) setTimeout(() => sfx.music(true), 1500);
   if (payload !== null && payload !== 0) showCrash(payload);
 });
@@ -883,6 +888,197 @@ $("crash-copy").addEventListener("click", async () => {
 $("crash-close").addEventListener("click", () => $("crash").classList.add("hidden"));
 
 /* =====================================================================
+   Vote avec rappel
+   ===================================================================== */
+const nowSec = () => Math.floor(Date.now() / 1000);
+function voteSites() { return (state.pack && state.pack.vote) || []; }
+function voteState(site) {
+  const last = (state.info.settings.votes || {})[site.name] || 0;
+  const next = last + (site.cooldown_hours || 24) * 3600;
+  return { last, next, ready: nowSec() >= next };
+}
+function fmtWait(sec) {
+  const m = Math.ceil(sec / 60), h = Math.floor(m / 60);
+  return h ? `${h} h ${String(m % 60).padStart(2, "0")}` : `${m} min`;
+}
+function renderVotes() {
+  const sites = voteSites();
+  $("vote-btn").classList.toggle("hidden", !sites.length);
+  if (!sites.length) return;
+  const ready = sites.filter((s) => voteState(s).ready).length;
+  $("vote-badge").textContent = ready;
+  $("vote-badge").classList.toggle("hidden", !ready);
+  $("vote-btn").classList.toggle("ready", ready > 0);
+  const list = $("vote-list");
+  list.innerHTML = "";
+  sites.forEach((site, i) => {
+    const st = voteState(site);
+    const row = document.createElement("div");
+    row.className = "vote-row" + (st.ready ? " ready" : "");
+    const num = document.createElement("span"); num.className = "vote-num"; num.textContent = i + 1;
+    const info = document.createElement("span"); info.className = "vote-info";
+    const name = document.createElement("strong"); name.textContent = site.name;
+    const sub = document.createElement("span");
+    if (st.ready) { sub.textContent = st.last ? "Tu peux revoter" : "Disponible"; sub.className = "ok"; }
+    else sub.textContent = "Prochain vote dans " + fmtWait(st.next - nowSec());
+    info.append(name, sub);
+    const btn = document.createElement("button");
+    btn.className = st.ready ? "primary" : "ghost";
+    btn.textContent = st.ready ? "Voter" : "Ouvrir";
+    btn.addEventListener("click", () => vote(site, st.ready));
+    row.append(num, info, btn);
+    list.appendChild(row);
+  });
+}
+function vote(site, counts) {
+  invoke("open_url", { url: site.url }).catch(() => {});
+  if (!counts) return;
+  const votes = Object.assign({}, state.info.settings.votes || {});
+  votes[site.name] = nowSec();
+  state.info.settings.votes = votes;
+  state.voteNotified = state.voteNotified || {};
+  saveSettings();
+  renderVotes();
+  toast(`Merci pour ton vote sur ${site.name} ! Je te préviendrai quand tu pourras revoter.`, 5000, "Merci !", "success");
+}
+/** Rappel : notification quand un vote redevient possible. */
+function checkVoteReminders(startup) {
+  const sites = voteSites();
+  if (!sites.length) return;
+  state.voteNotified = state.voteNotified || {};
+  // Pas de rappel pendant le règlement ou la visite guidée : on réessaiera au prochain passage.
+  if ((state.pack && rulesPending()) || !$("tour").classList.contains("hidden")) return renderVotes();
+  const ready = sites.filter((s) => {
+    const st = voteState(s);
+    if (!st.ready || state.voteNotified[s.name] === st.next) return false;
+    state.voteNotified[s.name] = st.next;
+    return true;
+  });
+  renderVotes();
+  if (!ready.length) return;
+  const msg = ready.length === 1 ? `Tu peux voter sur ${ready[0].name} !` : `Tu peux voter sur ${ready.length} sites !`;
+  setTimeout(() => {
+    const n = toast(msg + " Clique ici pour voter.", 8000, "Vote disponible", "info");
+    n.style.cursor = "pointer";
+    n.addEventListener("click", (e) => { if (!e.target.closest(".ntf-close")) openVotes(); });
+  }, startup ? 3500 : 0);
+}
+function openVotes() { renderVotes(); $("votes").classList.remove("hidden"); }
+$("vote-btn").addEventListener("click", openVotes);
+$("votes-close").addEventListener("click", () => $("votes").classList.add("hidden"));
+setInterval(() => { if (!$("votes").classList.contains("hidden")) renderVotes(); checkVoteReminders(false); }, 30000);
+
+/* =====================================================================
+   Règlement + visite guidée
+   ===================================================================== */
+function rulesVersion() { const r = state.pack && state.pack.rules; return r && (r.items || []).length ? r.version || "1" : null; }
+function rulesPending() { const v = rulesVersion(); return v !== null && state.info.settings.rules_accepted !== v; }
+function openRules(force) {
+  const r = state.pack.rules;
+  $("rules-title").textContent = r.title || "Règlement du serveur";
+  const ol = $("rules-list");
+  ol.innerHTML = "";
+  for (const it of r.items) { const li = document.createElement("li"); li.textContent = it; ol.appendChild(li); }
+  const already = !rulesPending() && !force;
+  $("rules-ok").checked = already;
+  $("rules-accept").disabled = !already;
+  $("rules-accept").textContent = rulesPending() ? "Accepter et continuer" : "Fermer";
+  $("rules").classList.remove("hidden");
+}
+$("rules-ok").addEventListener("change", () => ($("rules-accept").disabled = !$("rules-ok").checked));
+$("rules-accept").addEventListener("click", () => {
+  const first = rulesPending();
+  state.info.settings.rules_accepted = rulesVersion();
+  saveSettings();
+  $("rules").classList.add("hidden");
+  if (first) toast("Bon jeu sur le serveur !", 3500, "Règlement accepté", "success");
+  if (!state.info.settings.tour_done) setTimeout(startTour, 600);
+});
+$("rules-again").addEventListener("click", () => openRules(false));
+/** Au chargement du modpack : règlement d'abord, puis visite guidée la première fois. */
+function firstRunFlow() {
+  $("rules-again").classList.toggle("hidden", rulesVersion() === null);
+  if (state.firstRunDone) return;
+  state.firstRunDone = true;
+  if (rulesPending()) return setTimeout(() => openRules(true), 900);
+  if (!state.info.settings.tour_done) setTimeout(startTour, 1400);
+}
+
+const TOUR = [
+  { sel: "#play", title: "Jouer", text: "Un seul clic : le launcher met à jour les mods et te connecte directement au serveur." },
+  { sel: '[data-view="news"]', title: "Nouveautés", text: "Tout ce qui change sur le serveur et dans le modpack. Le point orange signale une nouveauté pas encore lue." },
+  { sel: '[data-view="mods"]', title: "Mods", text: "La liste des mods du serveur, et des mods optionnels à activer toi-même : minimap, shaders…" },
+  { sel: "#vote-btn", title: "Voter", text: "Vote pour le serveur une fois par jour. Le launcher te prévient quand tu peux revoter." },
+  { sel: '[data-view="settings"]', title: "Réglages", text: "Mémoire, sons, musique, langue… et le bouton Réparer si le jeu ne se lance plus." },
+  { sel: "#account", title: "Ton compte", text: "Connecte-toi ici avec ton compte Microsoft. Tu peux en ajouter plusieurs." },
+];
+let tourSteps = [], tourIdx = 0;
+function zoomFactor() { return parseFloat(document.documentElement.style.zoom) || 1; }
+function layoutRect(elm) {
+  const z = zoomFactor(), r = elm.getBoundingClientRect();
+  // Selon le navigateur, les coordonnées tiennent compte du zoom de la page (démo web) ou non.
+  const visual = Math.abs(document.body.getBoundingClientRect().width - document.body.offsetWidth * z) < 2 && z !== 1;
+  const k = visual ? z : 1;
+  return { left: r.left / k, top: r.top / k, width: r.width / k, height: r.height / k };
+}
+function startTour() {
+  if (state.phase !== "idle") return;
+  showView("home");
+  tourSteps = TOUR.filter((s) => { const e = document.querySelector(s.sel); return e && e.offsetParent !== null; });
+  if (!tourSteps.length) return;
+  tourIdx = 0;
+  $("tour").classList.remove("hidden");
+  showTourStep();
+}
+function showTourStep() {
+  const st = tourSteps[tourIdx], target = document.querySelector(st.sel);
+  const r = layoutRect(target), pad = 8, z = zoomFactor();
+  const vw = innerWidth / z, vh = innerHeight / z;
+  Object.assign($("tour-spot").style, { left: r.left - pad + "px", top: r.top - pad + "px", width: r.width + pad * 2 + "px", height: r.height + pad * 2 + "px" });
+  $("tour-step").textContent = `${tourIdx + 1} / ${tourSteps.length}`;
+  $("tour-title").textContent = st.title;
+  $("tour-text").textContent = st.text;
+  $("tour-next").textContent = tourIdx === tourSteps.length - 1 ? "Terminer" : "Suivant";
+  const card = $("tour-card"), cw = 320, ch = card.offsetHeight || 150;
+  let top = r.top + r.height + pad + 14;
+  if (top + ch > vh - 10) top = r.top - pad - 14 - ch;
+  let left = Math.min(vw - cw - 12, Math.max(12, r.left + r.width / 2 - cw / 2));
+  Object.assign(card.style, { left: left + "px", top: Math.max(10, top) + "px" });
+}
+function endTour() {
+  $("tour").classList.add("hidden");
+  setTimeout(() => checkVoteReminders(false), 1200);
+  if (!state.info.settings.tour_done) { state.info.settings.tour_done = true; saveSettings(); }
+}
+$("tour-next").addEventListener("click", () => { if (++tourIdx >= tourSteps.length) return endTour(); showTourStep(); });
+$("tour-skip").addEventListener("click", endTour);
+$("tour-again").addEventListener("click", () => setTimeout(startTour, 200));
+addEventListener("resize", () => { if (!$("tour").classList.contains("hidden")) showTourStep(); });
+
+/* =====================================================================
+   Temps de jeu
+   ===================================================================== */
+function fmtDuration(sec) {
+  const m = Math.round(sec / 60), h = Math.floor(m / 60);
+  if (h >= 10) return `${h} h`;
+  return h ? `${h} h ${String(m % 60).padStart(2, "0")}` : `${Math.max(1, m)} min`;
+}
+async function loadStats() {
+  const tz = -new Date().getTimezoneOffset();
+  const st = await invoke("get_stats", { tzOffsetMin: tz }).catch(() => null);
+  if (!st || !st.sessions) return $("playstats").classList.add("hidden");
+  const today = Math.floor((Date.now() / 1000 + tz * 60) / 86400);
+  const days = new Set(st.days || []);
+  let d = days.has(today) ? today : today - 1, streak = 0;
+  while (days.has(d)) { streak++; d--; }
+  $("ps-total").textContent = `${fmtDuration(st.total_secs)} de jeu`;
+  $("ps-last").textContent = `Dernière session : ${fmtDuration(st.last_session_secs)}`;
+  $("ps-streak").textContent = `${streak} jour${streak > 1 ? "s" : ""} d'affilée`;
+  $("ps-streak-wrap").classList.toggle("hidden", streak < 2);
+  $("playstats").classList.remove("hidden");
+}
+
+/* =====================================================================
    Onglets & réglages
    ===================================================================== */
 function moveIndicator() {
@@ -892,7 +1088,11 @@ function moveIndicator() {
   ind.style.width = active.offsetWidth + "px";
 }
 
+const VIEW_ORDER = ["home", "news", "mods", "shots", "settings"];
+let currentView = "home";
 function showView(v) {
+  const dir = VIEW_ORDER.indexOf(v) >= VIEW_ORDER.indexOf(currentView) ? "enter-r" : "enter-l";
+  currentView = v;
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === v));
   moveIndicator();
   if (v === "news" && state.latestNews) { lsSet("nouveautes-vues", state.latestNews); $("news-dot").classList.add("hidden"); }
@@ -903,7 +1103,7 @@ function showView(v) {
     const show = name === v;
     if (show && view.classList.contains("hidden")) {
       view.classList.remove("hidden");
-      view.classList.remove("enter"); void view.offsetWidth; view.classList.add("enter");
+      view.classList.remove("enter", "enter-r", "enter-l"); void view.offsetWidth; view.classList.add(dir);
     } else if (!show) {
       view.classList.add("hidden");
     }
@@ -959,6 +1159,9 @@ function saveSettings() {
     music_volume: +$("music-volume").value,
     optimized_java: $("opt-java").checked,
     lang: $("lang").value,
+    theme: $("theme").value,
+    season: $("season").value,
+    daytime: $("daytime").value,
   });
   state.info.settings = settings;
   $("display-size").disabled = settings.fullscreen;
@@ -968,6 +1171,7 @@ $("display-mode").addEventListener("change", saveSettings);
 $("display-size").addEventListener("change", saveSettings);
 $("discord-rpc").addEventListener("change", saveSettings);
 $("opt-java").addEventListener("change", saveSettings);
+for (const id of ["theme", "season", "daytime"]) $(id).addEventListener("change", () => { saveSettings(); applyAmbiance(); });
 function renderVolume() {
   const v = +$("volume").value;
   $("volume").style.setProperty("--p", v + "%");
@@ -1108,47 +1312,162 @@ $("upd-check").addEventListener("click", async () => {
    ===================================================================== */
 const motes = (() => {
   const cv = $("motes"), cx = cv.getContext("2d");
-  let W = 0, H = 0, dpr = 1, parts = [], last = 0;
-  const sprite = document.createElement("canvas");
-  sprite.width = sprite.height = 32;
-  const sg = sprite.getContext("2d"), grad = sg.createRadialGradient(16, 16, 0, 16, 16, 16);
-  grad.addColorStop(0, "rgba(255,226,160,1)"); grad.addColorStop(0.35, "rgba(255,196,110,.55)"); grad.addColorStop(1, "rgba(255,170,80,0)");
-  sg.fillStyle = grad; sg.fillRect(0, 0, 32, 32);
+  let W = 0, H = 0, parts = [], last = 0, mode = "motes", pumpkins = [];
+  const sprites = {};
+  function glowSprite(rgb) {
+    if (sprites[rgb]) return sprites[rgb];
+    const c = document.createElement("canvas"); c.width = c.height = 32;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(0.35, `rgba(${rgb},.5)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+    return (sprites[rgb] = c);
+  }
   function resize() {
-    dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     W = innerWidth; H = innerHeight;
     cv.width = W * dpr; cv.height = H * dpr;
     cx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const LEAF = ["#C8642A", "#D9922E", "#A7402A", "#8A5A2B", "#E0A23A"], PETAL = ["#F7C6D9", "#F4B0C8", "#FFE1EC", "#F9D2E2"];
   function spawn(fresh) {
-    return { x: Math.random() * W, y: fresh ? Math.random() * H : H + 10, r: 2 + Math.random() * 5, vy: 8 + Math.random() * 18,
-      sway: 6 + Math.random() * 18, f: 0.2 + Math.random() * 0.5, ph: Math.random() * 6.28, tw: 0.6 + Math.random() * 1.6, a: 0.25 + Math.random() * 0.55 };
+    const y0 = fresh ? Math.random() * H : null;
+    switch (mode) {
+      case "snow": return { x: rnd(0, W), y: y0 ?? -10, r: rnd(1.2, 3.6), vy: rnd(18, 55), sway: rnd(8, 26), f: rnd(.3, .9), ph: rnd(0, 6.3), a: rnd(.5, .95) };
+      case "leaves": return { x: rnd(0, W), y: y0 ?? -20, r: rnd(8, 13), vy: rnd(22, 48), sway: rnd(30, 70), f: rnd(.25, .6), ph: rnd(0, 6.3), rot: rnd(0, 6.3), vr: rnd(-2.5, 2.5), c: LEAF[(Math.random() * LEAF.length) | 0], a: rnd(.75, 1) };
+      case "petals": return { x: rnd(0, W), y: y0 ?? -10, r: rnd(3, 5.5), vy: rnd(14, 30), sway: rnd(25, 55), f: rnd(.3, .7), ph: rnd(0, 6.3), rot: rnd(0, 6.3), vr: rnd(-2, 2), c: PETAL[(Math.random() * PETAL.length) | 0], a: rnd(.6, .95) };
+      case "fireflies": return { x: rnd(0, W), y: y0 ?? rnd(H * .3, H), r: rnd(2.5, 5), vx: rnd(-12, 12), vy: rnd(-10, 10), ph: rnd(0, 6.3), tw: rnd(.6, 1.6), a: rnd(.6, 1) };
+      case "embers": return { x: rnd(0, W), y: y0 ?? H + 10, r: rnd(2, 5), vy: rnd(14, 34), sway: rnd(6, 20), f: rnd(.2, .6), ph: rnd(0, 6.3), tw: rnd(.8, 2), a: rnd(.35, .8) };
+      default: return { x: rnd(0, W), y: y0 ?? H + 10, r: rnd(2, 7), vy: rnd(8, 26), sway: rnd(6, 24), f: rnd(.2, .7), ph: rnd(0, 6.3), tw: rnd(.6, 2.2), a: rnd(.25, .8) };
+    }
+  }
+  function count() {
+    const base = (W * H) / 16000;
+    return Math.round(Math.min(110, { snow: base * 1.4, leaves: base * .7, petals: base * .6, fireflies: base * .5, embers: base * .8 }[mode] ?? base));
+  }
+  function reset() {
+    parts = Array.from({ length: count() }, () => spawn(true));
+    pumpkins = mode === "embers" ? [{ x: .44, s: 1.1 }, { x: .5, s: .75 }, { x: .555, s: .9 }] : [];
+  }
+  function drawPumpkin(x, y, s, t) {
+    cx.save(); cx.translate(x, y); cx.scale(s, s);
+    cx.globalAlpha = .35 + .2 * Math.sin(t * 2); cx.drawImage(glowSprite("255,140,30"), -40, -40, 80, 80);
+    cx.globalAlpha = 1; cx.fillStyle = "#E3741F";
+    for (const [ox, w] of [[-9, 11], [9, 11], [0, 13]]) { cx.beginPath(); cx.ellipse(ox, 0, w, 12, 0, 0, Math.PI * 2); cx.fill(); }
+    cx.fillStyle = "#4A6B2A"; cx.fillRect(-2, -16, 4, 6);
+    cx.fillStyle = "#FFD36A"; cx.globalAlpha = .7 + .3 * Math.sin(t * 6);
+    cx.beginPath(); cx.moveTo(-9, -3); cx.lineTo(-5, -7); cx.lineTo(-2, -3); cx.fill();
+    cx.beginPath(); cx.moveTo(9, -3); cx.lineTo(5, -7); cx.lineTo(2, -3); cx.fill();
+    cx.beginPath(); cx.moveTo(-8, 4); cx.lineTo(8, 4); cx.lineTo(4, 8); cx.lineTo(0, 5); cx.lineTo(-4, 8); cx.fill();
+    cx.restore();
   }
   function frame(t) {
     requestAnimationFrame(frame);
     if (document.hidden || reduceMotion) { last = t; return; }
-    const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
+    const dt = last ? Math.min(0.05, (t - last) / 1000) : 0, ts = t / 1000;
     last = t;
     const boost = 1 + Math.min(3, kin.speed / 16);
     cx.clearRect(0, 0, W, H);
+    const acc = getComputedStyle(document.body).getPropertyValue("--acc-rgb").trim() || "233,180,76";
     for (const p of parts) {
-      p.y -= p.vy * dt * boost;
-      const x = p.x + Math.sin(t / 1000 * p.f + p.ph) * p.sway;
-      if (p.y < -20) Object.assign(p, spawn(false));
-      const alpha = p.a * (0.55 + 0.45 * Math.sin(t / 1000 * p.tw + p.ph)) * Math.min(1, (H - p.y) / 120);
-      cx.globalAlpha = Math.max(0, alpha);
-      cx.drawImage(sprite, x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      cx.globalAlpha = p.a;
+      if (mode === "snow" || mode === "leaves" || mode === "petals") {
+        p.y += p.vy * dt;
+        const x = p.x + Math.sin(ts * p.f + p.ph) * p.sway;
+        if (p.y > H + 20) Object.assign(p, spawn(false));
+        if (mode === "snow") { cx.fillStyle = "#F4F8FF"; cx.beginPath(); cx.arc(x, p.y, p.r, 0, Math.PI * 2); cx.fill(); continue; }
+        p.rot += p.vr * dt;
+        cx.save(); cx.translate(x, p.y); cx.rotate(p.rot); cx.scale(1, .45 + .55 * Math.abs(Math.sin(ts * 1.6 + p.ph)));
+        cx.fillStyle = p.c; cx.beginPath(); cx.ellipse(0, 0, p.r, p.r * (mode === "leaves" ? .55 : .7), 0, 0, Math.PI * 2); cx.fill();
+        if (mode === "leaves") { cx.strokeStyle = "rgba(60,30,10,.5)"; cx.lineWidth = .8; cx.beginPath(); cx.moveTo(-p.r, 0); cx.lineTo(p.r, 0); cx.stroke(); }
+        cx.restore();
+      } else if (mode === "fireflies") {
+        p.x += (p.vx + Math.sin(ts * .7 + p.ph) * 14) * dt; p.y += (p.vy + Math.cos(ts * .6 + p.ph) * 10) * dt;
+        if (p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) Object.assign(p, spawn(false), { y: Math.random() * H });
+        cx.globalAlpha = p.a * Math.max(0, Math.sin(ts * p.tw + p.ph)) ** 2;
+        cx.drawImage(glowSprite("200,255,120"), p.x - p.r * 2, p.y - p.r * 2, p.r * 4, p.r * 4);
+      } else {
+        p.y -= p.vy * dt * boost;
+        const x = p.x + Math.sin(ts * p.f + p.ph) * p.sway;
+        if (p.y < -20) Object.assign(p, spawn(false));
+        cx.globalAlpha = Math.max(0, p.a * (0.55 + 0.45 * Math.sin(ts * p.tw + p.ph)) * Math.min(1, (H - p.y) / 120));
+        cx.drawImage(glowSprite(mode === "embers" ? "255,140,40" : acc), x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+      }
     }
+    for (const pk of pumpkins) drawPumpkin(pk.x * W, H * 0.745 + Math.sin(ts + pk.x * 9) * 3, pk.s, ts + pk.x * 5);
+    cx.globalAlpha = 1;
   }
   return {
-    start() {
-      resize();
-      parts = Array.from({ length: Math.round(Math.min(70, (W * H) / 16000)) }, () => spawn(true));
-      addEventListener("resize", resize);
-      requestAnimationFrame(frame);
-    },
+    start() { resize(); reset(); addEventListener("resize", () => { resize(); reset(); }); requestAnimationFrame(frame); },
+    setMode(m) { if (m !== mode) { mode = m; if (W) reset(); } },
   };
 })();
+
+/* =====================================================================
+   Ambiance : thème de couleur, moment de la journée, saison
+   ===================================================================== */
+function autoDaytime(d = new Date()) {
+  const h = d.getHours() + d.getMinutes() / 60;
+  return h >= 6 && h < 9 ? "matin" : h >= 9 && h < 17 ? "jour" : h >= 17 && h < 20.5 ? "soir" : "nuit";
+}
+function autoSeason(d = new Date()) {
+  const md = (d.getMonth() + 1) * 100 + d.getDate();
+  if (md >= 1024 && md <= 1102) return "halloween";
+  if (md >= 1201 || md <= 319) return "hiver";
+  if (md >= 922) return "automne";
+  if (md >= 320 && md <= 620) return "printemps";
+  return "ete";
+}
+function applyAmbiance() {
+  const st = (state.info && state.info.settings) || {};
+  const day = st.daytime && st.daytime !== "auto" ? st.daytime : autoDaytime();
+  const season = st.season && st.season !== "auto" ? st.season : autoSeason();
+  document.body.dataset.theme = st.theme || "laiton";
+  document.body.className = document.body.className.replace(/\b[ts]-\S+/g, "").trim();
+  document.body.classList.add("t-" + day, "s-" + season);
+  const mode = season === "hiver" ? "snow" : season === "halloween" ? "embers" : day === "nuit" ? "fireflies" : season === "automne" ? "leaves" : season === "printemps" ? "petals" : "motes";
+  motes.setMode(mode);
+}
+setInterval(applyAmbiance, 5 * 60 * 1000);
+
+/* =====================================================================
+   Écran d'ouverture : engrenages dessinés au trait puis emboîtés
+   ===================================================================== */
+function runSplash() {
+  const sp = $("splash");
+  const reveal = () => {
+    sp.classList.add("out");
+    document.body.classList.remove("splashing", "splash-prep");
+    motes.start();
+  };
+  try { sfx.warm(); } catch {}
+  if (reduceMotion) return reveal();
+  const stage = $("splash-stage");
+  const css = getComputedStyle(document.body);
+  // Chaque engrenage est un élément à part que la carte graphique fait tourner : reste fluide même si le reste travaille.
+  const gear = (N, m, cx, cy, cls, color, delay, rot) => {
+    const R = (m * N) / 2, ro = R + m * 0.95, ri = R - m * 1.15, st = (2 * Math.PI) / N, size = (ro + 4) * 2;
+    const wrap = document.createElement("div");
+    wrap.className = "sg-wrap " + cls;
+    Object.assign(wrap.style, { width: size + "px", height: size + "px", left: cx - size / 2 + "px", top: cy - size / 2 + "px" });
+    const svg = el("svg", { viewBox: `${-size / 2} ${-size / 2} ${size} ${size}` }, null);
+    const g = el("g", rot ? { transform: `rotate(${rot})` } : {}, svg);
+    const pts = [];
+    for (let i = 0; i < N; i++) for (const [r, o] of [[ri, -0.29], [ro, -0.16], [ro, 0.16], [ri, 0.29]]) pts.push(`${(r * Math.cos(i * st + o * st)).toFixed(2)},${(r * Math.sin(i * st + o * st)).toFixed(2)}`);
+    el("path", { d: "M" + pts.join(" L") + " Z", fill: "none", stroke: color, "stroke-width": 2.4, pathLength: 1, style: `animation-delay:${delay}s` }, g);
+    el("circle", { r: R * 0.42, fill: "none", stroke: color, "stroke-width": 2, pathLength: 1, style: `animation-delay:${delay + 0.1}s` }, g);
+    el("rect", { x: -R * 0.12, y: -R * 0.12, width: R * 0.24, height: R * 0.24, fill: "none", stroke: color, "stroke-width": 2, pathLength: 1, style: `animation-delay:${delay + 0.18}s` }, g);
+    wrap.appendChild(svg);
+    stage.appendChild(wrap);
+    return R;
+  };
+  const R1 = gear(16, 9, 110, 90, "sg1", css.getPropertyValue("--gear-a").trim() || "#F2C35B", 0, 0);
+  gear(10, 9, 110 + R1 + 45 + 1, 90, "sg2", css.getPropertyValue("--gear-b").trim() || "#F08A55", 0.08, 18);
+  $("splash-name").textContent = lsGet("nom-serveur") || "";
+  // Le launcher se dessine derrière l'écran d'ouverture un peu avant sa disparition : pas d'à-coup au fondu.
+  setTimeout(() => document.body.classList.add("splash-prep"), 1500);
+  setTimeout(reveal, 2000);
+}
 
 let parallaxRaf = 0;
 document.addEventListener("mousemove", (e) => {
@@ -1164,6 +1483,34 @@ document.addEventListener("mousemove", (e) => {
 document.addEventListener("visibilitychange", () => document.body.classList.toggle("paused", document.hidden));
 
 /* =====================================================================
+   Reflets qui suivent la souris + inclinaison 3D des cartes
+   ===================================================================== */
+const TILT = ".mod, .rel-card, .opt, .shot, .vote-row, .card";
+let tilted = null;
+document.addEventListener("mousemove", (e) => {
+  if (reduceMotion) return;
+  const z = zoomFactor();
+  const sh = e.target.closest(".panel, .hero, .card");
+  if (sh) {
+    const r = sh.getBoundingClientRect();
+    sh.style.setProperty("--sx", ((e.clientX - r.left) / z).toFixed(0) + "px");
+    sh.style.setProperty("--sy", ((e.clientY - r.top) / z).toFixed(0) + "px");
+  }
+  const t = e.target.closest(TILT);
+  if (tilted && tilted !== t) tilted.style.rotate = "";
+  tilted = t;
+  if (t) {
+    const r = t.getBoundingClientRect();
+    const dx = (e.clientX - r.left) / r.width - 0.5, dy = (e.clientY - r.top) / r.height - 0.5;
+    const max = t.classList.contains("card") ? 2.5 : 7;
+    const ang = Math.min(1, Math.hypot(dx, dy) * 2) * max;
+    t.style.rotate = ang > 0.2 ? `${(-dy).toFixed(3)} ${dx.toFixed(3)} 0 ${ang.toFixed(2)}deg` : "";
+  }
+}, { passive: true });
+document.addEventListener("mouseleave", () => { if (tilted) tilted.style.rotate = ""; tilted = null; });
+document.querySelectorAll(".settings .card").forEach((c, i) => c.style.setProperty("--i", i));
+
+/* =====================================================================
    Sons : clics sur les boutons et interrupteurs
    ===================================================================== */
 document.addEventListener("click", (e) => {
@@ -1177,21 +1524,26 @@ document.addEventListener("click", (e) => {
    Démarrage
    ===================================================================== */
 (async function init() {
+  runSplash();
   buildMachine();
   requestAnimationFrame(tick);
   requestAnimationFrame(moveIndicator);
   state.info = await invoke("get_info");
   const s = state.info.settings;
   i18n.start(s.lang || "fr");
+  $("theme").value = s.theme || "laiton";
+  $("season").value = s.season || "auto";
+  $("daytime").value = s.daytime || "auto";
+  applyAmbiance();
   $("lang").value = s.lang === "en" ? "en" : "fr";
   $("volume").value = s.sound_volume ?? 60;
   renderVolume();
   $("music-on").checked = s.music_on !== false;
   $("music-volume").value = s.music_volume ?? 35;
   renderMusic();
-  motes.start();
-  setTimeout(() => sfx.startup(), 350);
-  if ($("music-on").checked) setTimeout(() => sfx.music(true), 1800);
+  loadStats();
+  setTimeout(() => sfx.startup(), 1050);
+  if ($("music-on").checked) setTimeout(() => sfx.music(true), 2600);
   $("opt-java").checked = s.optimized_java !== false;
   $("ram-auto").checked = s.ram_mb === 0;
   $("ram").max = ramLimits().max;
