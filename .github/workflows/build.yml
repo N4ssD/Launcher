@@ -42,10 +42,10 @@ jobs:
         run: |
           rm -rf src-tauri/target/release/bundle
           if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            npx --yes @tauri-apps/cli@2 build
+            npx --yes @tauri-apps/cli@2.12.6 build
           else
             echo "::warning::Secret TAURI_SIGNING_PRIVATE_KEY absent : cette version ne proposera pas de mise à jour automatique (voir README)."
-            npx --yes @tauri-apps/cli@2 build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+            npx --yes @tauri-apps/cli@2.12.6 build --config '{"bundle":{"createUpdaterArtifacts":false}}'
           fi
 
       - name: Préparer l'installeur

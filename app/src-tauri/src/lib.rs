@@ -19,6 +19,8 @@ use tauri_plugin_updater::UpdaterExt;
 #[derive(Default)]
 struct AppState {
     busy: AtomicBool,
+    /// Mise à jour téléchargée, prête à être installée
+    pending_update: std::sync::Mutex<Option<(tauri_plugin_updater::Update, Vec<u8>)>>,
 }
 
 #[derive(Serialize, Clone)]
@@ -446,21 +448,20 @@ async fn check_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
     }
 }
 
+/// Télécharge la mise à jour en arrière-plan (sans l'installer).
 #[tauri::command]
-async fn install_update(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    if state.busy.load(Ordering::SeqCst) {
-        return Err("Attends la fin de la préparation du jeu.".into());
-    }
+async fn download_update(app: AppHandle) -> Result<String, String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
     let update = updater
         .check()
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Le launcher est déjà à jour.".to_string())?;
+    let version = update.version.clone();
     let app2 = app.clone();
     let mut done: u64 = 0;
-    update
-        .download_and_install(
+    let bytes = update
+        .download(
             move |chunk, total| {
                 done += chunk as u64;
                 let _ = app2.emit("update-progress", (done, total));
@@ -469,6 +470,42 @@ async fn install_update(app: AppHandle, state: State<'_, AppState>) -> Result<()
         )
         .await
         .map_err(|e| format!("La mise à jour a échoué : {e}"))?;
+    *app.state::<AppState>().pending_update.lock().unwrap() = Some((update, bytes));
+    Ok(version)
+}
+
+/// Installe la mise à jour téléchargée (installation silencieuse) puis redémarre.
+#[tauri::command]
+async fn install_update(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    if state.busy.load(Ordering::SeqCst) {
+        return Err("Attends la fin de la préparation du jeu.".into());
+    }
+    let pending = state.pending_update.lock().unwrap().take();
+    let (update, bytes) = match pending {
+        Some(p) => p,
+        None => {
+            let updater = app.updater().map_err(|e| e.to_string())?;
+            let update = updater
+                .check()
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| "Le launcher est déjà à jour.".to_string())?;
+            let app2 = app.clone();
+            let mut done: u64 = 0;
+            let bytes = update
+                .download(
+                    move |chunk, total| {
+                        done += chunk as u64;
+                        let _ = app2.emit("update-progress", (done, total));
+                    },
+                    || {},
+                )
+                .await
+                .map_err(|e| format!("La mise à jour a échoué : {e}"))?;
+            (update, bytes)
+        }
+    };
+    update.install(bytes).map_err(|e| format!("La mise à jour a échoué : {e}"))?;
     app.restart();
 }
 
@@ -488,6 +525,7 @@ pub fn run() {
             open_folder,
             play,
             check_update,
+            download_update,
             install_update,
             get_mods,
             list_screenshots,

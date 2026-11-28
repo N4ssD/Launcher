@@ -361,6 +361,7 @@ function backToIdle() {
   state.phase = "idle";
   renderPlay();
   loadPack();
+  setTimeout(maybeApplyUpdate, 2500);
 }
 
 listen("progress", ({ payload }) => {
@@ -1006,12 +1007,34 @@ async function checkUpdate(manual) {
   }
 }
 
+/** Télécharge la mise à jour en arrière-plan, sans bloquer le launcher. */
+async function backgroundUpdate(u) {
+  state.updateDownloading = true;
+  $("upd-status").textContent = `Version actuelle : v${state.info.version} · téléchargement de v${u.version}…`;
+  try {
+    const v = await invoke("download_update");
+    state.updateReady = v;
+    $("upd-status").textContent = `Version actuelle : v${state.info.version} · v${v} prête à installer`;
+    maybeApplyUpdate();
+  } catch (e) {
+    $("upd-status").textContent = `Version actuelle : v${state.info.version} · vérification impossible`;
+  } finally {
+    state.updateDownloading = false;
+  }
+}
+/** Installe dès que le launcher est libre (pas pendant la préparation ni pendant le jeu). */
+function maybeApplyUpdate() {
+  if (!state.updateReady || state.phase !== "idle" || !$("login").classList.contains("hidden")) return;
+  toast(`La version v${state.updateReady} est prête : le launcher redémarre…`, 2500, "Mise à jour");
+  setTimeout(() => state.phase === "idle" && installUpdate(), 1800);
+}
+
 async function installUpdate() {
   if (state.phase !== "idle") return toast("Attends la fin de la préparation du jeu avant de mettre à jour.", 5000, "Patiente un instant", "warning");
   const u = state.update;
   $("updater").classList.remove("hidden");
   $("upd-sub").textContent = u ? `v${state.info.version} → v${u.version}` : "Téléchargement de la nouvelle version…";
-  $("upd-pct").textContent = "Préparation…";
+  $("upd-pct").textContent = state.updateReady ? "Installation… le launcher va redémarrer" : "Préparation…";
   try {
     await invoke("install_update");
   } catch (e) {
@@ -1022,6 +1045,10 @@ async function installUpdate() {
 
 listen("update-progress", ({ payload }) => {
   const [done, total] = payload;
+  if ($("updater").classList.contains("hidden")) {
+    if (total) $("upd-status").textContent = `Version actuelle : v${state.info.version} · téléchargement… ${Math.round((done / total) * 100)} %`;
+    return;
+  }
   const fill = $("upd-fill");
   if (total) {
     fill.classList.remove("indeterminate");
@@ -1034,6 +1061,7 @@ listen("update-progress", ({ payload }) => {
 });
 
 $("upd-check").addEventListener("click", async () => {
+  if (state.updateDownloading) return toast("La mise à jour se télécharge déjà, elle s'installera toute seule.", 4000, "Mise à jour");
   if (state.update) return installUpdate();
   const u = await checkUpdate(true);
   if (u) toast(`La version v${u.version} est disponible. Clique sur « Installer ».`, 5000, "Mise à jour");
@@ -1148,7 +1176,7 @@ document.addEventListener("click", (e) => {
   loadPack();
   const u = await checkUpdate(false);
   if (u) {
-    if ($("upd-auto").checked) installUpdate();
+    if ($("upd-auto").checked) backgroundUpdate(u);
     else toast(`Une nouvelle version du launcher (v${u.version}) est disponible. Va dans Réglages pour l'installer.`, 8000, "Mise à jour");
   }
 })();

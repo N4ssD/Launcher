@@ -28,7 +28,7 @@ const sfx = (() => {
       reverb.buffer = impulse(3.4, 2.6);
       const wet = ctx.createGain(); wet.gain.value = 0.8;
       reverb.connect(wet).connect(ctx.destination);
-      sfxBus = ctx.createGain(); sfxBus.gain.value = sfxVol * 1.4; sfxBus.connect(ctx.destination);
+      sfxBus = ctx.createGain(); sfxBus.gain.value = sfxVol * 0.5; sfxBus.connect(ctx.destination);
       const sfxSend = ctx.createGain(); sfxSend.gain.value = 0.35; sfxBus.connect(sfxSend).connect(reverb);
       musicBus = ctx.createGain(); musicBus.gain.value = 0; musicBus.connect(ctx.destination);
       const musicSend = ctx.createGain(); musicSend.gain.value = 0.6; musicBus.connect(musicSend).connect(reverb);
@@ -159,7 +159,7 @@ const sfx = (() => {
     m.timer = setInterval(schedule, 400);
     musicBus.gain.cancelScheduledValues(t0);
     musicBus.gain.setValueAtTime(musicBus.gain.value, t0);
-    musicBus.gain.linearRampToValueAtTime(musicVol * 1.2, t0 + 5);
+    musicBus.gain.linearRampToValueAtTime(musicVol * 0.45, t0 + 5);
     music = m;
   }
 
@@ -182,10 +182,10 @@ const sfx = (() => {
   }
 
   return {
-    setVolume(v) { sfxVol = Math.max(0, Math.min(1, v)); if (sfxBus) sfxBus.gain.value = sfxVol * 1.4; },
+    setVolume(v) { sfxVol = Math.max(0, Math.min(1, v)); if (sfxBus) sfxBus.gain.value = sfxVol * 0.5; },
     setMusicVolume(v) {
       musicVol = Math.max(0, Math.min(1, v));
-      if (music && ctx) { musicBus.gain.cancelScheduledValues(ctx.currentTime); musicBus.gain.setTargetAtTime(musicVol * 1.2, ctx.currentTime, 0.3); }
+      if (music && ctx) { musicBus.gain.cancelScheduledValues(ctx.currentTime); musicBus.gain.setTargetAtTime(musicVol * 0.45, ctx.currentTime, 0.3); }
       if (musicVol <= 0) stopMusic(); else if (musicWanted && !music) startMusic();
     },
     music(on) {

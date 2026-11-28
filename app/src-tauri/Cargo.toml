@@ -1,6 +1,6 @@
 [package]
 name = "launcher"
-version = "1.6.0"
+version = "1.6.1"
 description = "Launcher du serveur Minecraft"
 authors = ["N4ssD"]
 edition = "2021"

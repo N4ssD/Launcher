@@ -75,10 +75,10 @@ pub struct Settings {
 }
 
 fn default_volume() -> u32 {
-    60
+    40
 }
 fn default_music() -> u32 {
-    35
+    25
 }
 fn default_lang() -> String {
     "fr".into()
